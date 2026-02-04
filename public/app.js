@@ -1,85 +1,99 @@
-async function api(path, opts = {}) {
-  const res = await fetch(path, { headers: { "content-type": "application/json" }, ...opts });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "erro");
-  return data;
-}
+const $ = (id) => document.getElementById(id);
 
-function qs(id){ return document.getElementById(id); }
-
-const elDate = qs("date");
-const elService = qs("service");
-const elName = qs("name");
-const elWhats = qs("whats");
-const elSlots = qs("slots");
-const elMsg = qs("msg");
-const btnLoad = qs("btnLoad");
-
-function todayISO(){
-  const d = new Date();
-  const mm = String(d.getMonth()+1).padStart(2,"0");
-  const dd = String(d.getDate()).padStart(2,"0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}
-
-function setMsg(t){ elMsg.textContent = t || ""; }
-
-async function loadServices(){
-  const { services } = await api("/api/services");
-  elService.innerHTML = services.map(s => `<option value="${s.id}">${s.name} (${s.durationMin}min)</option>`).join("");
-}
-
-function renderSlots(list, date, serviceId){
-  elSlots.innerHTML = "";
-  if (!list.length){
-    setMsg("Nenhum horário disponível para essa data.");
-    return;
-  }
-  setMsg("Clique em um horário para agendar.");
-  list.forEach(s => {
-    const b = document.createElement("button");
-    b.className = "slotBtn";
-    b.textContent = `${s.start}`;
-    b.onclick = async () => {
-      const clientName = (elName.value || "").trim();
-      if (clientName.length < 2) return setMsg("Digite seu nome para confirmar.");
-      b.disabled = true;
-      try{
-        const body = {
-          date,
-          time: s.start,
-          serviceId,
-          clientName,
-          clientWhatsapp: (elWhats.value || "").trim()
-        };
-        const r = await api("/api/book", { method:"POST", body: JSON.stringify(body) });
-        setMsg(`Agendado! Código: ${r.code}`);
-        btnLoad.click(); // refresh
-      }catch(e){
-        setMsg(e.message);
-      }finally{
-        b.disabled = false;
-      }
-    };
-    elSlots.appendChild(b);
-  });
-}
-
-btnLoad.onclick = async () => {
-  const date = elDate.value;
-  const serviceId = elService.value;
-  if (!date) return setMsg("Selecione uma data.");
-  setMsg("Carregando horários...");
-  try{
-    const r = await api(`/api/availability?date=${encodeURIComponent(date)}&service=${encodeURIComponent(serviceId)}`);
-    renderSlots(r.available || [], date, serviceId);
-  }catch(e){
-    setMsg(e.message);
-  }
+const SERVICES = {
+  corte_sobrancelha: { label: "Corte + Sobrancelha", duration: 40, price: 40 },
+  corte: { label: "Corte", duration: 40, price: 35 },
+  corte_barba: { label: "Corte + Barba", duration: 50, price: 50 },
+  corte_pigmentacao: { label: "Corte + Pigmentação", duration: 60, price: 50 },
+  barba: { label: "Barba", duration: 20, price: 20 },
+  corte_barba_pigmentacao: { label: "Corte + Barba + Pigmentação", duration: 60, price: 60 },
 };
 
-(async function init(){
-  elDate.value = todayISO();
-  await loadServices();
-  btnLoad.click();
-})();
+function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function renderServiceInfo() {
+  const key = $("service").value;
+  const s = SERVICES[key];
+  $("serviceInfo").textContent = s ? `${s.duration} min • R$ ${s.price}` : "";
+}
+
+async function loadSlots() {
+  const date = $("date").value;
+  const service = $("service").value;
+  const sel = $("time");
+  sel.innerHTML = "";
+
+  if (!date || !service) return;
+
+  const res = await fetch(`/api/slots?date=${encodeURIComponent(date)}&service=${encodeURIComponent(service)}`);
+  const data = await res.json();
+
+  if (!res.ok) {
+    $("msg").textContent = data.error || "Erro ao carregar horários.";
+    return;
+  }
+
+  if (!data.length) {
+    $("msg").textContent = "Sem horários disponíveis para essa data/serviço.";
+    return;
+  }
+
+  data.forEach(t => {
+    const o = document.createElement("option");
+    o.value = t;
+    o.textContent = t;
+    sel.appendChild(o);
+  });
+
+  $("msg").textContent = "";
+}
+
+async function book() {
+  const key = $("service").value;
+  const s = SERVICES[key];
+
+  const payload = {
+    name: $("name").value.trim(),
+    phone: $("phone").value.trim(),
+    date: $("date").value,
+    time: $("time").value,
+    serviceKey: key,
+  };
+
+  if (!payload.name || !payload.phone || !payload.date || !payload.time || !payload.serviceKey) {
+    $("msg").textContent = "Preencha nome, telefone, serviço, data e horário.";
+    return;
+  }
+
+  const res = await fetch("/api/bookings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    $("msg").textContent = data.error || "Erro ao agendar.";
+    return;
+  }
+
+  $("msg").textContent = `Agendado ✅ (${s.label} - R$ ${s.price})`;
+  await loadSlots();
+}
+
+$("date").value = todayISO();
+$("service").addEventListener("change", () => {
+  renderServiceInfo();
+  loadSlots();
+});
+$("date").addEventListener("change", loadSlots);
+$("btnBook").addEventListener("click", book);
+
+renderServiceInfo();
+loadSlots();

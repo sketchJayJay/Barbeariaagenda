@@ -9,52 +9,69 @@
 <body>
   <header class="top">
     <div class="brand">
-      <img class="logo" src="/logo.jpeg" alt="Logo Barbearia" onerror="this.style.display='none'"/>
+      <div class="logo">BS</div>
       <div>
         <h1>Barbearia Suprema</h1>
-        <p>Agende seu horário online ✂️</p>
+        <p>Agende seu horário online</p>
       </div>
     </div>
-    <a class="adminLink" href="/admin.html">Admin</a>
+    <a class="btn ghost" href="/admin.html">Área Admin</a>
   </header>
 
-  <main class="card">
-    <section class="grid">
-      <label>
-        <span>Data</span>
-        <input id="date" type="date" />
-      </label>
+  <main class="wrap">
+    <section class="card">
+      <h2>Novo agendamento</h2>
 
-      <label>
-        <span>Serviço</span>
-        <select id="service"></select>
-      </label>
+      <div class="grid">
+        <label>
+          Nome
+          <input id="name" placeholder="Seu nome" />
+        </label>
 
-      <label class="full">
-        <span>Nome</span>
-        <input id="name" type="text" placeholder="Seu nome" />
-      </label>
+        <label>
+          Telefone (WhatsApp)
+          <input id="phone" placeholder="(xx) xxxxx-xxxx" />
+        </label>
 
-      <label class="full">
-        <span>WhatsApp (opcional)</span>
-        <input id="whats" type="tel" placeholder="(DDD) 9xxxx-xxxx" />
-      </label>
+        <label>
+          Data
+          <input id="date" type="date" />
+        </label>
+
+        <label>
+          Horário
+          <select id="time"></select>
+        </label>
+
+        <label class="full">
+          Serviço
+          <select id="service">
+            <option value="corte_sobrancelha">Corte + Sobrancelha (40 min) • R$ 40</option>
+            <option value="corte">Corte (40 min) • R$ 35</option>
+            <option value="corte_barba">Corte + Barba (50 min) • R$ 50</option>
+            <option value="corte_pigmentacao">Corte + Pigmentação (60 min) • R$ 50</option>
+            <option value="barba">Barba (20 min) • R$ 20</option>
+            <option value="corte_barba_pigmentacao">Corte + Barba + Pigmentação (60 min) • R$ 60</option>
+          </select>
+        </label>
+      </div>
+
+      <button class="btn" id="btnBook">Confirmar Agendamento</button>
+
+      <p class="hint" id="serviceInfo"></p>
+      <p class="hint" id="msg"></p>
     </section>
 
-    <div class="actions">
-      <button id="btnLoad">Ver horários</button>
-    </div>
-
-    <section>
-      <h2>Horários disponíveis</h2>
-      <div id="slots" class="slots"></div>
-      <p id="msg" class="msg"></p>
+    <section class="card">
+      <h2>Como funciona</h2>
+      <ul class="list">
+        <li>Escolha a data, o serviço e um horário disponível.</li>
+        <li>Preencha seus dados e confirme.</li>
+        <li>O admin consegue ver e cancelar no painel.</li>
+      </ul>
+      <p class="hint">Teste rápido: <code>/api/health</code></p>
     </section>
   </main>
-
-  <footer class="foot">
-    <small>© Barbearia Suprema</small>
-  </footer>
 
   <script src="/app.js"></script>
 </body>

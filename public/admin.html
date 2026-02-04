@@ -9,51 +9,123 @@
 <body>
   <header class="top">
     <div class="brand">
-      <h1>Admin</h1>
-      <p>Listar e cancelar agendamentos</p>
+      <div class="logo">BS</div>
+      <div>
+        <h1>Admin</h1>
+        <p>Barbearia Suprema</p>
+      </div>
     </div>
-    <a class="adminLink" href="/">Voltar</a>
+    <a class="btn ghost" href="/">Voltar</a>
   </header>
 
-  <main class="card">
-    <section class="grid">
-      <label>
-        <span>Senha do Admin</span>
-        <input id="pass" type="password" placeholder="ADMIN_PASSWORD" />
-      </label>
-      <label>
-        <span>Filtrar por data (opcional)</span>
-        <input id="date" type="date" />
-      </label>
+  <main class="wrap">
+    <section class="card">
+      <h2>Acesso</h2>
+      <div class="grid">
+        <label class="full">
+          Senha do Admin
+          <input id="pass" type="password" placeholder="Digite a senha do admin" />
+        </label>
+      </div>
+      <button class="btn" id="btnLogin">Entrar</button>
+      <p class="hint" id="msg"></p>
     </section>
 
-    <div class="actions">
-      <button id="btnLoad">Carregar</button>
-      <button id="btnCsv" class="secondary">Exportar CSV</button>
-    </div>
+    <section class="card">
+      <h2>Agendamentos</h2>
+      <div class="grid">
+        <label>
+          Data (opcional)
+          <input id="filterDate" type="date" />
+        </label>
+        <label>
+          Ação
+          <button class="btn ghost" id="btnRefresh" type="button">Atualizar</button>
+        </label>
+      </div>
 
-    <div class="tableWrap">
-      <table id="tbl">
-        <thead>
-          <tr>
-            <th>Data</th>
-            <th>Início</th>
-            <th>Fim</th>
-            <th>Serviço</th>
-            <th>Cliente</th>
-            <th>WhatsApp</th>
-            <th>Status</th>
-            <th>Código</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-
-    <p id="msg" class="msg"></p>
+      <div class="table" id="table"></div>
+      <p class="hint">Dica: clique em "Atualizar" após logar.</p>
+    </section>
   </main>
 
-  <script src="/admin.js"></script>
+  <script>
+    let token = "";
+
+    const msg = (t) => document.getElementById("msg").textContent = t;
+
+    async function fetchBookings() {
+      if (!token) return;
+      const d = document.getElementById("filterDate").value;
+      const url = d ? `/api/admin/bookings?date=${encodeURIComponent(d)}` : `/api/admin/bookings`;
+      const res = await fetch(url, { headers: { "x-admin-token": token } });
+      const data = await res.json();
+
+      if (!res.ok) {
+        msg(data.error || "Erro ao carregar.");
+        return;
+      }
+
+      const el = document.getElementById("table");
+      if (!data.length) {
+        el.innerHTML = "<p class='hint'>Nenhum agendamento encontrado.</p>";
+        return;
+      }
+
+      el.innerHTML = `
+        <div class="row head">
+          <div>Data</div><div>Hora</div><div>Nome</div><div>Telefone</div><div>Serviço</div><div>Duração</div><div>Preço</div><div>Status</div><div>Ações</div>
+        </div>
+        ${data.map(b => `
+          <div class="row">
+            <div>${b.date}</div>
+            <div>${b.time}</div>
+            <div>${b.name}</div>
+            <div>${b.phone}</div>
+            <div>${b.service_label}</div>
+            <div>${b.duration_min} min</div>
+            <div>R$ ${b.price}</div>
+            <div>${b.status}</div>
+            <div>
+              ${b.status === "active" ? `<button class="btn danger" type="button" onclick="cancelBooking(${b.id})">Cancelar</button>` : ""}
+            </div>
+          </div>
+        `).join("")}
+      `;
+    }
+
+    async function cancelBooking(id) {
+      const res = await fetch(`/api/admin/bookings/${id}/cancel`, {
+        method: "POST",
+        headers: { "x-admin-token": token }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        msg(data.error || "Erro ao cancelar.");
+        return;
+      }
+      msg("Cancelado ✅");
+      fetchBookings();
+    }
+
+    window.cancelBooking = cancelBooking;
+
+    document.getElementById("btnLogin").onclick = async () => {
+      const pass = document.getElementById("pass").value.trim();
+      if (!pass) return msg("Digite a senha.");
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pass })
+      });
+      const data = await res.json();
+      if (!res.ok) return msg(data.error || "Login falhou.");
+      token = data.token;
+      msg("Logado ✅");
+      fetchBookings();
+    };
+
+    document.getElementById("btnRefresh").onclick = fetchBookings;
+  </script>
 </body>
 </html>
