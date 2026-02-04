@@ -108,14 +108,20 @@ app.get("/api/slots", async (req, res) => {
   const s = SERVICES[serviceKey];
   const { start, end, slots } = buildSlots();
 
+  // Busca todos os agendamentos do dia UMA vez (bem mais rápido e evita timeout)
+  const { rows } = await pool.query(
+    "SELECT start_min, end_min FROM bookings WHERE date = $1 AND status = 'active'",
+    [date]
+  );
+  const booked = rows.map(r => ({ start: Number(r.start_min), end: Number(r.end_min) }));
+
   const possible = [];
   for (const st of slots) {
     const en = st + s.duration;
     if (st < start) continue;
     if (en > end) continue;
 
-    // eslint-disable-next-line no-await-in-loop
-    const conflict = await hasOverlap(date, st, en);
+    const conflict = booked.some(b => !(b.end <= st || b.start >= en));
     if (!conflict) possible.push(minToTime(st));
   }
 
