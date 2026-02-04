@@ -2,312 +2,127 @@
 <html lang="pt-br">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Barbearia Suprema • Agendamentos</title>
-  <link rel="icon" href="/logo.jpeg" />
-  <style>
-    :root{
-      --bg1:#12060a;
-      --bg2:#2a0d13;
-      --card: rgba(20,20,24,.72);
-      --stroke: rgba(255,255,255,.10);
-      --txt:#f2f2f2;
-      --muted: rgba(255,255,255,.75);
-      --accent:#e53935;
-      --accent2:#ff5252;
-      --ok:#39d98a;
-      --warn:#ffb020;
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      color:var(--txt);
-      min-height:100vh;
-      background: radial-gradient(1200px 600px at 20% 10%, rgba(229,57,53,.22), transparent 60%),
-                  radial-gradient(1200px 600px at 80% 0%, rgba(0,120,255,.15), transparent 55%),
-                  linear-gradient(160deg,var(--bg1),var(--bg2));
-      overflow-x:hidden;
-    }
-    .wrap{
-      max-width:1100px;
-      margin:0 auto;
-      padding:32px 16px 80px;
-      position:relative;
-    }
-    .watermark{
-      position:fixed;
-      inset:0;
-      pointer-events:none;
-      opacity:.08;
-      background-image:url('/logo.jpeg');
-      background-repeat:no-repeat;
-      background-position:center;
-      background-size:min(520px,75vw);
-      filter: blur(.2px) saturate(1.1);
-      transform: translateZ(0);
-    }
-    header{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:16px;
-      margin-bottom:20px;
-    }
-    .brand{
-      display:flex;
-      align-items:center;
-      gap:14px;
-    }
-    .brand img{
-      width:64px;height:64px;border-radius:14px;
-      object-fit:cover;
-      border:1px solid var(--stroke);
-      box-shadow: 0 12px 30px rgba(0,0,0,.35);
-      background:#000;
-    }
-    .brand h1{
-      font-size:22px;
-      margin:0;
-      line-height:1.1;
-      letter-spacing:.2px;
-    }
-    .brand p{margin:4px 0 0;color:var(--muted);font-size:13px}
-    .pill{
-      display:inline-flex;
-      align-items:center;
-      gap:10px;
-      padding:10px 14px;
-      border:1px solid var(--stroke);
-      border-radius:999px;
-      background: rgba(0,0,0,.25);
-      backdrop-filter: blur(10px);
-      text-decoration:none;
-      color:var(--txt);
-      font-size:13px;
-      white-space:nowrap;
-    }
-    .pill svg{width:18px;height:18px}
-    .grid{
-      display:grid;
-      grid-template-columns: 1.2fr .8fr;
-      gap:18px;
-      margin-top:14px;
-    }
-    @media (max-width: 900px){
-      .grid{grid-template-columns:1fr}
-    }
-    .card{
-      background: var(--card);
-      border:1px solid var(--stroke);
-      border-radius:22px;
-      padding:18px;
-      box-shadow: 0 22px 60px rgba(0,0,0,.35);
-      backdrop-filter: blur(14px);
-    }
-    .card h2{margin:4px 0 10px;font-size:18px}
-    .card small{color:var(--muted)}
-    form{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap:12px 14px;
-      margin-top:12px;
-    }
-    form .full{grid-column:1/-1}
-    label{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
-    input, select{
-      width:100%;
-      padding:12px 12px;
-      border-radius:14px;
-      border:1px solid var(--stroke);
-      background: rgba(0,0,0,.25);
-      color:var(--txt);
-      outline:none;
-    }
-    input::placeholder{color:rgba(255,255,255,.45)}
-    .btn{
-      width:100%;
-      border:none;
-      border-radius:16px;
-      padding:14px 14px;
-      background: linear-gradient(135deg,var(--accent),var(--accent2));
-      color:white;
-      font-weight:700;
-      cursor:pointer;
-      box-shadow: 0 14px 30px rgba(229,57,53,.25);
-    }
-    .btn:disabled{
-      opacity:.55;
-      cursor:not-allowed;
-      box-shadow:none;
-    }
-    .meta{
-      display:flex;
-      gap:10px;
-      flex-wrap:wrap;
-      margin-top:10px;
-      color:var(--muted);
-      font-size:13px;
-    }
-    .note{
-      margin-top:12px;
-      padding:12px 12px;
-      border-radius:16px;
-      border:1px solid var(--stroke);
-      background: rgba(0,0,0,.20);
-      color:var(--muted);
-      font-size:13px;
-    }
-    .ok{
-      border-color: rgba(57,217,138,.35);
-      background: rgba(57,217,138,.10);
-      color: rgba(230,255,245,.95);
-    }
-    .err{
-      border-color: rgba(255,82,82,.35);
-      background: rgba(255,82,82,.10);
-      color: rgba(255,230,230,.95);
-    }
-    .warn{
-      border-color: rgba(255,176,32,.35);
-      background: rgba(255,176,32,.10);
-      color: rgba(255,245,220,.95);
-    }
-    .kpi{
-      display:flex;
-      gap:12px;
-      flex-wrap:wrap;
-      margin-top:10px;
-    }
-    .kpi .box{
-      flex:1;
-      min-width:170px;
-      padding:12px;
-      border-radius:18px;
-      border:1px solid var(--stroke);
-      background: rgba(0,0,0,.20);
-    }
-    .kpi .box strong{display:block;font-size:16px}
-    .kpi .box span{color:var(--muted);font-size:12px}
-    .footer{
-      margin-top:16px;
-      display:flex;
-      gap:10px;
-      flex-wrap:wrap;
-      justify-content:space-between;
-      align-items:center;
-      color:rgba(255,255,255,.55);
-      font-size:12px;
-    }
-    .link{
-      color:rgba(255,255,255,.85);
-      text-decoration:none;
-      border-bottom:1px dashed rgba(255,255,255,.25);
-    }
-  
-    .note{display:block}
-    .note.ok{border-color: rgba(57,217,138,.35); color: rgba(210,255,230,.92);}
-    .note.warn{border-color: rgba(255,176,32,.35); color: rgba(255,240,210,.92);}
-    .note.err{border-color: rgba(255,82,82,.35); color: rgba(255,220,220,.92);}
-    .ticket{display:block}
-    .ticket__title{font-weight:900; font-size:15px; margin-bottom:8px}
-    .ticket__row{margin:6px 0; color: rgba(240,240,240,.92)}
-    .ticket__actions{display:flex; gap:10px; flex-wrap:wrap; margin-top:12px}
-    .ticket__hint{margin-top:10px; font-size:12px; color: rgba(220,220,220,.85)}
-    .ticket__pre{white-space:pre-wrap; margin-top:10px; padding:10px; border-radius:12px; border:1px solid var(--stroke); background: rgba(0,0,0,.22);}
-    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
-    .btn-copy{background: rgba(255,255,255,.08); border:1px solid var(--stroke);}
-    .btn-whatsapp{border:1px solid rgba(57,217,138,.35);}
-
-  </style>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="/assets/logo.jpeg" />
 </head>
 <body>
-  <div class="watermark"></div>
-  <div class="wrap">
-    <header>
-      <div class="brand">
-        <img src="/logo.jpeg" alt="Logo Barbearia" />
-        <div>
-          <h1 id="shopName">Barbearia Suprema</h1>
-          <p id="shopHours">Horário: 08:00 às 20:00</p>
-        </div>
+  <div class="bg"></div>
+
+  <header class="top">
+    <div class="brand">
+      <img class="logo" src="/assets/logo.jpeg" alt="Barbearia Suprema" />
+      <div>
+        <div class="brand-title">Barbearia Suprema</div>
+        <div class="brand-sub" id="brandHours">08:00 às 20:00</div>
       </div>
-      <a class="pill" id="whatsPill" href="#" target="_blank" rel="noopener">
-        <span aria-hidden="true" style="font-size:16px;line-height:1">📲</span>
-        Outros serviços? Fale no WhatsApp
-      </a>
-    </header>
+    </div>
 
-    <div class="grid">
-      <section class="card">
-        <h2>Novo agendamento</h2>
-        <small>Escolha o serviço e o sistema vai mostrar apenas os horários disponíveis.</small>
+    <a id="whatsOwner" class="whats-btn" href="#" target="_blank" rel="noopener">
+      <span class="wa-ico" aria-hidden="true"></span>
+      Outros serviços? Fale no WhatsApp
+    </a>
+  </header>
 
-        <form id="form">
-          <div>
+  <main class="wrap">
+    <section class="card">
+      <h2>Novo agendamento</h2>
+      <p class="muted">Escolha o serviço e o sistema vai mostrar apenas os horários disponíveis.</p>
+
+      <form id="bookingForm" autocomplete="off">
+        <div class="grid2">
+          <div class="field">
             <label>Nome</label>
-            <input id="name" placeholder="Seu nome" required />
+            <input id="name" placeholder="Seu nome" required minlength="2" />
           </div>
-          <div>
+
+          <div class="field">
             <label>Telefone (WhatsApp)</label>
             <input id="phone" placeholder="(xx) xxxxx-xxxx" required />
           </div>
 
-          <div>
+          <div class="field">
             <label>Data</label>
             <input id="date" type="date" required />
           </div>
-          <div>
+
+          <div class="field">
             <label>Horário</label>
-            <select id="time" required>
-              <option value="">Selecione a data e o serviço</option>
+            <select id="slot" required>
+              <option value="">Selecione...</option>
             </select>
           </div>
-
-          <div class="full">
-            <label>Serviço</label>
-            <select id="service" required></select>
-          </div>
-
-          <div class="full">
-            <button class="btn" id="submitBtn" type="submit">Confirmar Agendamento</button>
-          </div>
-        </form>
-
-        <div class="meta" id="meta"></div>
-
-        <div class="note" id="msg" style="display:none"></div>
-
-        <div class="footer">
-          <span>Ao confirmar, você verá a confirmação na tela.</span>
-          <a class="link" href="/admin" target="_blank" rel="noopener">Área do dono</a>
         </div>
-      </section>
 
-      <aside class="card">
-        <h2>Como funciona</h2>
-        <ul style="margin:10px 0 0; padding-left:18px; color:var(--muted); line-height:1.6">
-          <li>Horário de funcionamento: <b>08:00 às 20:00</b></li>
-          <li>Os horários ocupados somem automaticamente.</li>
-          <li>Se não aparecer horário, é porque lotou naquele dia.</li>
-          <li>Precisa de outro serviço? Clique no WhatsApp acima.</li>
-        </ul>
-        <div class="kpi">
-          <div class="box">
-            <strong id="kpiOpen">08:00</strong>
-            <span>Abertura</span>
-          </div>
-          <div class="box">
-            <strong id="kpiClose">20:00</strong>
-            <span>Fechamento</span>
-          </div>
+        <div class="field">
+          <label>Serviço</label>
+          <select id="service" required></select>
         </div>
-        <div class="note warn" style="margin-top:12px">
-          <b>WhatsApp:</b> a confirmação por mensagem é enviada pelo dono pela área administrativa (1 clique).
+
+        <button class="primary" id="btnConfirm" type="submit">Confirmar Agendamento</button>
+
+        <div class="mini" id="serviceInfo"></div>
+        <div class="error" id="initError" style="display:none"></div>
+      </form>
+
+      <div id="ticketBox" class="ticket" style="display:none">
+        <div class="ticket-top">
+          <div>
+            <div class="ticket-title">✅ Agendamento confirmado</div>
+            <div class="ticket-sub">Guarde seu ticket:</div>
+          </div>
+          <div class="ticket-code" id="ticketCode">BS-XXXXXX</div>
         </div>
-      </aside>
-    </div>
-  </div>
+
+        <div class="ticket-grid">
+          <div><span>Cliente:</span> <b id="tName"></b></div>
+          <div><span>Telefone:</span> <b id="tPhone"></b></div>
+          <div><span>Data:</span> <b id="tDate"></b></div>
+          <div><span>Horário:</span> <b id="tTime"></b></div>
+          <div><span>Serviço:</span> <b id="tService"></b></div>
+          <div><span>Valor:</span> <b id="tPrice"></b></div>
+        </div>
+
+        <div class="ticket-actions">
+          <button class="ghost" id="btnCopy" type="button">Copiar ticket</button>
+          <a class="primary small" id="btnWhatsTicket" href="#" target="_blank" rel="noopener">Abrir WhatsApp com o ticket</a>
+          <button class="ghost" id="btnNew" type="button">Novo agendamento</button>
+        </div>
+
+        <div class="muted2">
+          * O WhatsApp abre com a mensagem pronta. É só clicar em <b>Enviar</b>.
+        </div>
+      </div>
+
+      <a class="owner-link" href="/admin">Área do dono</a>
+    </section>
+
+    <aside class="card">
+      <h2>Como funciona</h2>
+      <ul>
+        <li>Horário de funcionamento: <b>08:00 às 20:00</b></li>
+        <li>Os horários ocupados somem automaticamente.</li>
+        <li>Se não aparecer horário, é porque lotou naquele dia.</li>
+        <li>Precisa de outro serviço? Clique no WhatsApp acima.</li>
+      </ul>
+
+      <div class="statgrid">
+        <div class="stat">
+          <div class="stat-big">08:00</div>
+          <div class="stat-sub">Abertura</div>
+        </div>
+        <div class="stat">
+          <div class="stat-big">20:00</div>
+          <div class="stat-sub">Fechamento</div>
+        </div>
+      </div>
+
+      <div class="note">
+        <b>WhatsApp:</b> após confirmar, você verá o ticket e pode enviar a mensagem no WhatsApp em 1 clique.
+      </div>
+    </aside>
+  </main>
 
   <script src="/app.js"></script>
 </body>

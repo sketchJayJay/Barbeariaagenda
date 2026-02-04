@@ -1,530 +1,468 @@
-const path = require('path');
-const crypto = require('crypto');
-const express = require('express');
-const { Pool } = require('pg');
+\
+const express = require("express");
+const path = require("path");
+const crypto = require("crypto");
+const { Pool } = require("pg");
 
 const app = express();
-app.use(express.json({ limit: '256kb' }));
 
-// Serve frontend
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
 
-// -------------------- Config --------------------
-const BARBERSHOP_NAME = process.env.BARBERSHOP_NAME || 'Barbearia Suprema';
-// Número da barbearia (55 + DDD + número). Padrão: 55 32 998195165
-const WHATSAPP_BARBERSHOP = (process.env.WHATSAPP_BARBERSHOP || '5532998195165').replace(/\D/g, '');
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'; // troque no Coolify!
+// ---- Config ----
+const PORT = process.env.PORT || 3000;
+const DATABASE_URL = process.env.DATABASE_URL || "";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+const OWNER_WHATSAPP = (process.env.OWNER_WHATSAPP || "32998195165").replace(/\D/g, "");
+const TZ = process.env.TZ || "America/Sao_Paulo";
 
-const TIME_OPEN = process.env.TIME_OPEN || '08:00';
-const TIME_CLOSE = process.env.TIME_CLOSE || '20:00';
-const SLOT_INTERVAL_MIN = Number(process.env.SLOT_INTERVAL_MIN || 10);
+// Horário de funcionamento: 08:00 - 20:00
+const OPEN_MIN = 8 * 60;
+const CLOSE_MIN = 20 * 60;
+const SLOT_STEP = 10; // minutos (passo de agenda)
 
-function hhmmToMin(hhmm) {
-  const [h, m] = String(hhmm).split(':').map(n => Number(n));
-  return (h * 60) + (m || 0);
-}
-function minToHHMM(min) {
-  const h = String(Math.floor(min / 60)).padStart(2, '0');
-  const m = String(min % 60).padStart(2, '0');
-  return `${h}:${m}`;
-}
-const OPEN_MIN = hhmmToMin(TIME_OPEN);
-const CLOSE_MIN = hhmmToMin(TIME_CLOSE);
-
-// Services (você pode editar depois)
+// Serviços
 const SERVICES = [
-  { key: 'corte_sobrancelha', name: 'Corte + Sobrancelha', duration_min: 40, price: 40 },
-  { key: 'corte', name: 'Corte', duration_min: 40, price: 35 },
-  { key: 'corte_barba', name: 'Corte + Barba', duration_min: 50, price: 50 },
-  { key: 'corte_pigmentacao', name: 'Corte + Pigmentação', duration_min: 60, price: 50 },
-  { key: 'barba', name: 'Barba', duration_min: 20, price: 20 },
-  { key: 'corte_barba_pigmentacao', name: 'Corte + Barba + Pigmentação', duration_min: 60, price: 60 },
+  { key: "corte_sobrancelha", label: "Corte + Sobrancelha", duration_min: 40, price_reais: 40 },
+  { key: "corte", label: "Corte", duration_min: 40, price_reais: 35 },
+  { key: "corte_barba", label: "Corte + Barba", duration_min: 50, price_reais: 50 },
+  { key: "corte_pigmentacao", label: "Corte + Pigmentação", duration_min: 60, price_reais: 50 },
+  { key: "barba", label: "Barba", duration_min: 20, price_reais: 20 },
+  { key: "corte_barba_pigmentacao", label: "Corte + Barba + Pigmentação", duration_min: 60, price_reais: 60 },
 ];
 
-function serviceLabel(s) {
-  return `${s.name} (${s.duration_min} min) • R$ ${s.price}`;
+// ---- DB ----
+let pool = null;
+
+function getPool() {
+  if (!pool) {
+    if (!DATABASE_URL) {
+      throw new Error("FALTOU DATABASE_URL");
+    }
+    // SSL opcional: se seu Postgres exigir, set PGSSL=true no Coolify.
+    const useSSL = String(process.env.PGSSL || "").toLowerCase() === "true";
+    pool = new Pool({
+      connectionString: DATABASE_URL,
+      ssl: useSSL ? { rejectUnauthorized: false } : undefined,
+    });
+  }
+  return pool;
 }
 
-function normalizePhoneBR(input) {
-  let digits = String(input || '').replace(/\D/g, '');
-  // Se usuário digitou DDD+numero (ex 32998123456), adiciona 55
-  if (digits.length === 10 || digits.length === 11) digits = '55' + digits;
-  return digits;
-}
-
-function formatTicketText(b) {
-  return [
-    `✅ Agendamento confirmado - ${BARBERSHOP_NAME}`,
-    ``,
-    `🎟️ Ticket: ${b.ticket_code}`,
-    `👤 Nome: ${b.name}`,
-    `💈 Serviço: ${b.service_label}`,
-    `📅 Data: ${b.date}`,
-    `🕒 Horário: ${b.time}`,
-    `⏱️ Duração: ${b.duration_min} min`,
-    `💰 Valor: R$ ${b.price}`,
-    ``,
-    `Guarde este ticket. Se precisar alterar/cancelar, fale conosco.`,
-  ].join('\n');
-}
-
-function whatsappLink(phoneDigits, text) {
-  const p = normalizePhoneBR(phoneDigits);
-  const t = encodeURIComponent(text);
-  return `https://wa.me/${p}?text=${t}`;
-}
-
-// -------------------- Database --------------------
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-  console.error('FALTOU DATABASE_URL (configure no Coolify > Environment Variables)');
-  process.exit(1);
-}
-
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-  // Para Postgres interno do Coolify normalmente NÃO precisa SSL.
-  // Se você usar um Postgres externo com SSL, ajuste a URL (sslmode=require) ou configure PGSSLMODE.
-});
-
-async function ensureSchema() {
-  // bookings
-  await pool.query(`
+async function initDb() {
+  const p = getPool();
+  // Cria tabelas e índices (idempotente)
+  await p.query(`
     CREATE TABLE IF NOT EXISTS bookings (
       id SERIAL PRIMARY KEY,
+      ticket TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
       service_key TEXT NOT NULL,
       service_label TEXT NOT NULL,
       duration_min INT NOT NULL,
-      price INT NOT NULL,
+      price_cents INT NOT NULL,
       date TEXT NOT NULL,
       start_min INT NOT NULL,
       end_min INT NOT NULL,
       status TEXT NOT NULL DEFAULT 'active',
-      ticket_code TEXT NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date);`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);`);
 
-  // migrations (se uma tabela antiga existir com colunas diferentes)
-  const cols = await pool.query(`
-    SELECT column_name FROM information_schema.columns
-    WHERE table_name='bookings'
-  `);
-  const colset = new Set(cols.rows.map(r => r.column_name));
-  if (!colset.has('start_min')) {
-    // tenta migrar de start_time (HH:MM) se existir
-    if (colset.has('start_time')) {
-      await pool.query(`ALTER TABLE bookings ADD COLUMN start_min INT NOT NULL DEFAULT 0;`);
-      // se a tabela antiga guardava start_time como texto HH:MM
-      await pool.query(`UPDATE bookings SET start_min = (split_part(start_time, ':', 1)::int*60 + split_part(start_time, ':', 2)::int)
-                        WHERE (start_min IS NULL OR start_min = 0) AND start_time IS NOT NULL;`);
-    } else {
-      await pool.query(`ALTER TABLE bookings ADD COLUMN start_min INT NOT NULL DEFAULT 0;`);
-    }
-    await pool.query(`UPDATE bookings SET start_min = 0 WHERE start_min IS NULL;`);
-    try { await pool.query(`ALTER TABLE bookings ALTER COLUMN start_min SET NOT NULL;`); } catch (_) {}
-  }
-  if (!colset.has('end_min')) {
-    if (colset.has('end_time')) {
-      await pool.query(`ALTER TABLE bookings ADD COLUMN end_min INT NOT NULL DEFAULT 0;`);
-      await pool.query(`UPDATE bookings SET end_min = (split_part(end_time, ':', 1)::int*60 + split_part(end_time, ':', 2)::int)
-                        WHERE (end_min IS NULL OR end_min = 0) AND end_time IS NOT NULL;`);
-    } else {
-      await pool.query(`ALTER TABLE bookings ADD COLUMN end_min INT NOT NULL DEFAULT 0;`);
-    }
-    await pool.query(`UPDATE bookings SET end_min = 0 WHERE end_min IS NULL;`);
-    try { await pool.query(`ALTER TABLE bookings ALTER COLUMN end_min SET NOT NULL;`); } catch (_) {}
-  }
-  if (!colset.has('ticket_code')) {
-    await pool.query(`ALTER TABLE bookings ADD COLUMN ticket_code TEXT NOT NULL DEFAULT '';`);
-    await pool.query(`UPDATE bookings SET ticket_code = 'BS-' || id || '-' || replace(date,'-','') WHERE ticket_code IS NULL OR ticket_code = '';`);
-    try { await pool.query(`ALTER TABLE bookings ALTER COLUMN ticket_code SET NOT NULL;`); } catch (_) {}
-  }
+  await p.query(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date);`);
+  await p.query(`CREATE INDEX IF NOT EXISTS idx_bookings_date_start ON bookings(date, start_min);`);
 
-  // finance_moves
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS finance_moves (
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS finance (
       id SERIAL PRIMARY KEY,
-      kind TEXT NOT NULL CHECK (kind IN ('in','out')),
-      amount NUMERIC(10,2) NOT NULL,
-      note TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('in', 'out')),
+      amount_cents INT NOT NULL,
+      description TEXT,
       date TEXT NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_finance_date ON finance_moves(date);`);
+  await p.query(`CREATE INDEX IF NOT EXISTS idx_finance_date ON finance(date);`);
 }
 
-// -------------------- Public API --------------------
-app.get('/api/health', async (req, res) => {
+function toHHMM(min) {
+  const h = String(Math.floor(min / 60)).padStart(2, "0");
+  const m = String(min % 60).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+function cleanPhone(phone) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  // Brasil: se tiver 10 ou 11 dígitos, assume DDD + número
+  if (digits.length === 10 || digits.length === 11) return "55" + digits;
+  // já com 55?
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) return digits;
+  return digits; // fallback
+}
+
+function genTicket() {
+  // Ex: BS-8F3K2Q
+  const rand = crypto.randomBytes(4).toString("hex").toUpperCase().slice(0, 6);
+  return `BS-${rand}`;
+}
+
+function parseCookies(cookieHeader) {
+  const out = {};
+  if (!cookieHeader) return out;
+  cookieHeader.split(";").forEach(part => {
+    const idx = part.indexOf("=");
+    if (idx === -1) return;
+    const k = part.slice(0, idx).trim();
+    const v = part.slice(idx + 1).trim();
+    out[k] = decodeURIComponent(v);
+  });
+  return out;
+}
+
+function sign(payload) {
+  // payload: string
+  return crypto.createHmac("sha256", ADMIN_PASSWORD || "default").update(payload).digest("base64url");
+}
+
+function makeAdminToken() {
+  const payload = JSON.stringify({ t: Date.now() });
+  const payloadB64 = Buffer.from(payload, "utf8").toString("base64url");
+  const sig = sign(payloadB64);
+  return `${payloadB64}.${sig}`;
+}
+
+function verifyAdminToken(token) {
+  if (!token || !ADMIN_PASSWORD) return false;
+  const parts = token.split(".");
+  if (parts.length !== 2) return false;
+  const [payloadB64, sig] = parts;
+  const expected = sign(payloadB64);
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
+  // opcional: expiração 7 dias
   try {
-    const r = await pool.query('select 1 as ok');
-    res.json({ ok: true, db: r.rows?.[0]?.ok === 1 });
+    const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
+    if (!payload.t) return false;
+    const age = Date.now() - payload.t;
+    return age < 7 * 24 * 60 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+function adminAuth(req, res, next) {
+  const cookies = parseCookies(req.headers.cookie || "");
+  if (verifyAdminToken(cookies.admin_session)) return next();
+  return res.status(401).json({ ok: false, error: "unauthorized" });
+}
+
+// ---- API ----
+app.get("/api/health", async (req, res) => {
+  try {
+    const p = getPool();
+    const r = await p.query("select 1 as ok");
+    res.json({ ok: true, db: r.rows[0].ok, tz: TZ });
   } catch (e) {
-    res.status(500).json({ ok: false, error: 'db_error' });
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-app.get('/api/config', (req, res) => {
+app.get("/api/services", (req, res) => {
   res.json({
-    open: TIME_OPEN,
-    close: TIME_CLOSE,
-    interval: SLOT_INTERVAL_MIN,
-    barbershopName: BARBERSHOP_NAME,
-    whatsappBarbershop: WHATSAPP_BARBERSHOP,
-  });
-});
-
-app.get('/api/services', (req, res) => {
-  res.json({
+    ok: true,
+    owner_whatsapp: OWNER_WHATSAPP,
+    open: toHHMM(OPEN_MIN),
+    close: toHHMM(CLOSE_MIN),
     services: SERVICES.map(s => ({
       key: s.key,
-      name: s.name,
+      label: `${s.label} (${s.duration_min} min) • R$ ${s.price_reais}`,
       duration_min: s.duration_min,
-      price: s.price,
-      label: serviceLabel(s),
-    })),
+      price_reais: s.price_reais
+    }))
   });
 });
 
-app.get('/api/slots', async (req, res) => {
-  const date = String(req.query.date || '').trim();
-  const service_key = String(req.query.service_key || '').trim();
-
-  const svc = SERVICES.find(s => s.key === service_key);
-  if (!date || !svc) return res.status(400).json({ error: 'bad_request' });
-
+app.get("/api/slots", async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      `SELECT start_min, end_min FROM bookings WHERE date=$1 AND status='active'`,
+    const date = String(req.query.date || "");
+    const serviceKey = String(req.query.service || "");
+    const svc = SERVICES.find(s => s.key === serviceKey);
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ ok: false, error: "date inválida (YYYY-MM-DD)" });
+    }
+    if (!svc) return res.status(400).json({ ok: false, error: "service inválido" });
+
+    const p = getPool();
+    const { rows } = await p.query(
+      "SELECT start_min, end_min FROM bookings WHERE date=$1 AND status='active' ORDER BY start_min",
       [date]
     );
 
-    const taken = rows.map(r => ({ start: Number(r.start_min), end: Number(r.end_min) }));
+    const busy = rows.map(r => ({ start: Number(r.start_min), end: Number(r.end_min) }));
     const slots = [];
 
-    for (let start = OPEN_MIN; start + svc.duration_min <= CLOSE_MIN; start += SLOT_INTERVAL_MIN) {
+    for (let start = OPEN_MIN; start + svc.duration_min <= CLOSE_MIN; start += SLOT_STEP) {
       const end = start + svc.duration_min;
-      const clash = taken.some(b => start < b.end && end > b.start);
-      if (!clash) slots.push(minToHHMM(start));
+      const conflict = busy.some(b => start < b.end && end > b.start);
+      if (!conflict) {
+        slots.push({ value: start, label: toHHMM(start) });
+      }
     }
 
-    res.json({ slots });
+    res.json({ ok: true, slots });
   } catch (e) {
-    console.error('slots error:', e);
-    res.status(500).json({ error: 'db_error' });
+    console.error("slots error:", e);
+    res.status(500).json({ ok: false, error: "db_error" });
   }
 });
 
-app.post('/api/bookings', async (req, res) => {
-  const name = String(req.body?.name || '').trim();
-  const phone = String(req.body?.phone || '').trim();
-  const date = String(req.body?.date || '').trim();
-  const service_key = String(req.body?.service_key || '').trim();
-  const time = String(req.body?.time || '').trim();
+app.post("/api/bookings", async (req, res) => {
+  const name = String(req.body.name || "").trim();
+  const phone = String(req.body.phone || "").trim();
+  const date = String(req.body.date || "").trim();
+  const serviceKey = String(req.body.service_key || "").trim();
+  const startMin = Number(req.body.start_min);
 
-  const svc = SERVICES.find(s => s.key === service_key);
-  if (!name || !phone || !date || !svc || !/^\d{2}:\d{2}$/.test(time)) {
-    return res.status(400).json({ error: 'bad_request' });
+  const svc = SERVICES.find(s => s.key === serviceKey);
+
+  if (!name || name.length < 2) return res.status(400).json({ ok: false, error: "Nome inválido" });
+  if (!phone || phone.replace(/\D/g, "").length < 10) return res.status(400).json({ ok: false, error: "Telefone inválido" });
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ ok: false, error: "Data inválida" });
+  if (!svc) return res.status(400).json({ ok: false, error: "Serviço inválido" });
+  if (!Number.isFinite(startMin)) return res.status(400).json({ ok: false, error: "Horário inválido" });
+
+  const endMin = startMin + svc.duration_min;
+  if (startMin < OPEN_MIN || endMin > CLOSE_MIN) {
+    return res.status(400).json({ ok: false, error: "Fora do horário de funcionamento" });
   }
 
-  const start_min = hhmmToMin(time);
-  const end_min = start_min + svc.duration_min;
+  const ticket = genTicket();
+  const priceCents = Math.round(Number(svc.price_reais) * 100);
 
-  if (start_min < OPEN_MIN || end_min > CLOSE_MIN) {
-    return res.status(400).json({ error: 'outside_hours' });
-  }
-
-  const client = await pool.connect();
+  const p = getPool();
+  const client = await p.connect();
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
+    // Confere conflito (reserva concorrente)
     const conflict = await client.query(
-      `SELECT id FROM bookings
+      `SELECT 1 FROM bookings
        WHERE date=$1 AND status='active'
-         AND ($2 < end_min AND $3 > start_min)
+       AND ($2 < end_min AND $3 > start_min)
        LIMIT 1`,
-      [date, start_min, end_min]
+      [date, startMin, endMin]
     );
-
     if (conflict.rowCount > 0) {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ error: 'slot_unavailable' });
+      await client.query("ROLLBACK");
+      return res.status(409).json({ ok: false, error: "Horário acabou de ser ocupado. Escolha outro." });
     }
 
-    // cria ticket_code previsível
-    const ticket_code = `BS-${Date.now().toString(36).toUpperCase()}-${date.replace(/-/g, '')}`;
-
-    const insert = await client.query(
-      `INSERT INTO bookings
-        (name, phone, service_key, service_label, duration_min, price, date, start_min, end_min, status, ticket_code)
-       VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10)
-       RETURNING id, created_at`,
-      [name, phone, service_key, serviceLabel(svc), svc.duration_min, svc.price, date, start_min, end_min, ticket_code]
+    const ins = await client.query(
+      `INSERT INTO bookings (ticket, name, phone, service_key, service_label, duration_min, price_cents, date, start_min, end_min)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING id, ticket, created_at`,
+      [ticket, name, phone, svc.key, svc.label, svc.duration_min, priceCents, date, startMin, endMin]
     );
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
-    const booking = {
-      id: insert.rows[0].id,
-      created_at: insert.rows[0].created_at,
-      name,
-      phone,
-      date,
-      time,
-      service_key,
-      service_label: serviceLabel(svc),
-      duration_min: svc.duration_min,
-      price: svc.price,
-      ticket_code,
-    };
-
-    const ticket_text = formatTicketText(booking);
-    const whatsapp_url = whatsappLink(phone, ticket_text);
-
-    res.json({ ok: true, booking, ticket_text, whatsapp_url });
+    res.json({
+      ok: true,
+      booking: {
+        id: ins.rows[0].id,
+        ticket: ins.rows[0].ticket,
+        created_at: ins.rows[0].created_at,
+        name,
+        phone,
+        date,
+        start: toHHMM(startMin),
+        end: toHHMM(endMin),
+        service_label: svc.label,
+        duration_min: svc.duration_min,
+        price_reais: svc.price_reais
+      }
+    });
   } catch (e) {
-    await client.query('ROLLBACK');
-    console.error('create booking error:', e);
-    res.status(500).json({ error: 'db_error' });
+    try { await client.query("ROLLBACK"); } catch {}
+    console.error("create booking error:", e);
+    res.status(500).json({ ok: false, error: "db_error" });
   } finally {
     client.release();
   }
 });
 
-// -------------------- Admin Auth (simple) --------------------
-const adminTokens = new Map(); // token -> expiresAt (ms)
+// ---- Admin login ----
+app.get("/admin/login", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "admin-login.html"));
+});
 
-function parseCookies(header) {
-  const out = {};
-  if (!header) return out;
-  header.split(';').forEach(p => {
-    const i = p.indexOf('=');
-    if (i > -1) out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim());
-  });
-  return out;
-}
-
-function requireAdmin(req, res, next) {
-  const cookies = parseCookies(req.headers.cookie || '');
-  const t = cookies.admin_token;
-  if (!t) return res.status(401).json({ error: 'unauthorized' });
-  const exp = adminTokens.get(t);
-  if (!exp || Date.now() > exp) {
-    adminTokens.delete(t);
-    return res.status(401).json({ error: 'unauthorized' });
+app.post("/admin/login", (req, res) => {
+  const pass = String(req.body.password || "");
+  if (!ADMIN_PASSWORD) {
+    return res.status(500).send("FALTOU ADMIN_PASSWORD no Coolify.");
   }
-  return next();
-}
-
-app.post('/api/admin/login', (req, res) => {
-  const password = String(req.body?.password || '');
-  if (password !== ADMIN_PASSWORD) return res.status(401).json({ error: 'bad_password' });
-
-  const token = crypto.randomUUID();
-  adminTokens.set(token, Date.now() + (24 * 60 * 60 * 1000)); // 24h
-
-  // secure se estiver em https
-  const secure = (req.headers['x-forwarded-proto'] || '').includes('https');
-  res.setHeader('Set-Cookie',
-    `admin_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${24 * 60 * 60}${secure ? '; Secure' : ''}`
-  );
-  res.json({ ok: true });
+  if (pass !== ADMIN_PASSWORD) {
+    return res.status(401).sendFile(path.join(__dirname, "public", "admin-login.html"));
+  }
+  const token = makeAdminToken();
+  res.setHeader("Set-Cookie", `admin_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 60 * 60}`);
+  res.redirect("/admin");
 });
 
-app.post('/api/admin/logout', (req, res) => {
-  const cookies = parseCookies(req.headers.cookie || '');
-  if (cookies.admin_token) adminTokens.delete(cookies.admin_token);
-  res.setHeader('Set-Cookie', 'admin_token=; Path=/; Max-Age=0; SameSite=Lax');
-  res.json({ ok: true });
+app.get("/admin/logout", (req, res) => {
+  res.setHeader("Set-Cookie", "admin_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
+  res.redirect("/admin/login");
 });
 
-app.get('/api/admin/me', requireAdmin, (req, res) => {
-  res.json({ ok: true, barbershopName: BARBERSHOP_NAME });
+app.get("/admin", (req, res) => {
+  const cookies = parseCookies(req.headers.cookie || "");
+  if (!verifyAdminToken(cookies.admin_session)) {
+    return res.redirect("/admin/login");
+  }
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
-// -------------------- Admin Bookings --------------------
-app.get('/api/admin/bookings', requireAdmin, async (req, res) => {
-  const date = String(req.query.date || '').trim();
-  if (!date) return res.status(400).json({ error: 'bad_request' });
-
+// ---- Admin API ----
+app.get("/api/admin/bookings", adminAuth, async (req, res) => {
+  const date = String(req.query.date || "");
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ ok: false, error: "date inválida" });
+  }
   try {
-    const { rows } = await pool.query(
-      `SELECT id, name, phone, service_label, duration_min, price, date, start_min, end_min, status, ticket_code, created_at
+    const p = getPool();
+    const { rows } = await p.query(
+      `SELECT id, ticket, name, phone, service_label, duration_min, price_cents, date, start_min, end_min, status, created_at
        FROM bookings
        WHERE date=$1
-       ORDER BY start_min ASC`,
+       ORDER BY start_min`,
       [date]
     );
-
-    const bookings = rows.map(r => ({
-      id: r.id,
-      name: r.name,
-      phone: r.phone,
-      service_label: r.service_label,
-      duration_min: r.duration_min,
-      price: Number(r.price),
-      date: r.date,
-      time_label: minToHHMM(Number(r.start_min)),
-      end_label: minToHHMM(Number(r.end_min)),
-      status: r.status,
-      ticket_code: r.ticket_code,
-      created_at: r.created_at,
-    }));
-
-    res.json({
-      bookings,
-      whatsapp_link_prefix: 'https://wa.me/', // admin.js vai montar com telefone
-      barbershop_whatsapp: WHATSAPP_BARBERSHOP,
-      barbershop_name: BARBERSHOP_NAME,
-    });
+    res.json({ ok: true, bookings: rows.map(r => ({
+      ...r,
+      start: toHHMM(Number(r.start_min)),
+      end: toHHMM(Number(r.end_min)),
+      price_reais: (Number(r.price_cents) / 100).toFixed(2)
+    }))});
   } catch (e) {
-    console.error('admin bookings error:', e);
-    res.status(500).json({ error: 'db_error' });
+    console.error("admin bookings error:", e);
+    res.status(500).json({ ok: false, error: "db_error" });
   }
 });
 
-
-// compat: endpoint antigo usado pelo admin.js
-app.post('/api/admin/cancel', requireAdmin, async (req, res) => {
-  const id = Number(req.body?.id);
-  if (!id) return res.status(400).json({ error: 'bad_request' });
+app.patch("/api/admin/bookings/:id", adminAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const status = String(req.body.status || "");
+  if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "id inválido" });
+  if (!["active", "cancelled", "done"].includes(status)) return res.status(400).json({ ok: false, error: "status inválido" });
 
   try {
-    await pool.query(`UPDATE bookings SET status='cancelled' WHERE id=$1`, [id]);
+    const p = getPool();
+    await p.query("UPDATE bookings SET status=$1 WHERE id=$2", [status, id]);
     res.json({ ok: true });
   } catch (e) {
-    console.error('cancel booking error:', e);
-    res.status(500).json({ error: 'db_error' });
+    console.error("admin booking update error:", e);
+    res.status(500).json({ ok: false, error: "db_error" });
   }
 });
 
-app.post('/api/admin/bookings/cancel', requireAdmin, async (req, res) => {
-  const id = Number(req.body?.id);
-  if (!id) return res.status(400).json({ error: 'bad_request' });
-
-  try {
-    await pool.query(`UPDATE bookings SET status='cancelled' WHERE id=$1`, [id]);
-    res.json({ ok: true });
-  } catch (e) {
-    console.error('cancel booking error:', e);
-    res.status(500).json({ error: 'db_error' });
+app.get("/api/admin/finance", adminAuth, async (req, res) => {
+  const start = String(req.query.start || "");
+  const end = String(req.query.end || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+    return res.status(400).json({ ok: false, error: "start/end inválidos (YYYY-MM-DD)" });
   }
-});
-
-// -------------------- Admin Finance --------------------
-function parseDateISO(s) {
-  // s: YYYY-MM-DD
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(s))) return null;
-  return String(s);
-}
-
-app.get('/api/admin/finance', requireAdmin, async (req, res) => {
-  const from = parseDateISO(req.query.from);
-  const to = parseDateISO(req.query.to);
-  if (!from || !to) return res.status(400).json({ error: 'bad_request' });
-
   try {
-    const movesQ = await pool.query(
-      `SELECT id, kind, amount, note, date, created_at
-       FROM finance_moves
+    const p = getPool();
+    const { rows } = await p.query(
+      `SELECT id, kind, amount_cents, description, date, created_at
+       FROM finance
        WHERE date >= $1 AND date <= $2
        ORDER BY date DESC, id DESC`,
-      [from, to]
+      [start, end]
     );
+    res.json({ ok: true, items: rows.map(r => ({
+      ...r,
+      amount_reais: (Number(r.amount_cents) / 100).toFixed(2)
+    }))});
+  } catch (e) {
+    console.error("finance list error:", e);
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
 
-    const bookingsQ = await pool.query(
-      `SELECT COALESCE(SUM(price),0) as total
-       FROM bookings
-       WHERE status='active' AND date >= $1 AND date <= $2`,
-      [from, to]
+app.get("/api/admin/finance/summary", adminAuth, async (req, res) => {
+  const start = String(req.query.start || "");
+  const end = String(req.query.end || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+    return res.status(400).json({ ok: false, error: "start/end inválidos" });
+  }
+  try {
+    const p = getPool();
+    const { rows } = await p.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN kind='in' THEN amount_cents ELSE 0 END),0) AS total_in,
+         COALESCE(SUM(CASE WHEN kind='out' THEN amount_cents ELSE 0 END),0) AS total_out
+       FROM finance
+       WHERE date >= $1 AND date <= $2`,
+      [start, end]
     );
-
-    const moves = movesQ.rows.map(r => ({
-      id: r.id,
-      kind: r.kind,
-      amount: Number(r.amount),
-      note: r.note,
-      date: r.date,
-      created_at: r.created_at,
-    }));
-
-    const in_total = moves.filter(m => m.kind === 'in').reduce((a, m) => a + m.amount, 0);
-    const out_total = moves.filter(m => m.kind === 'out').reduce((a, m) => a + m.amount, 0);
-    const bookings_total = Number(bookingsQ.rows[0].total || 0);
-    const net_total = (bookings_total + in_total) - out_total;
-
+    const totalIn = Number(rows[0].total_in);
+    const totalOut = Number(rows[0].total_out);
     res.json({
-      from, to,
-      bookings_total,
-      in_total,
-      out_total,
-      net_total,
-      moves,
+      ok: true,
+      total_in_reais: (totalIn / 100).toFixed(2),
+      total_out_reais: (totalOut / 100).toFixed(2),
+      net_reais: ((totalIn - totalOut) / 100).toFixed(2),
     });
   } catch (e) {
-    console.error('finance error:', e);
-    res.status(500).json({ error: 'db_error' });
+    console.error("finance summary error:", e);
+    res.status(500).json({ ok: false, error: "db_error" });
   }
 });
 
-app.post('/api/admin/finance/add', requireAdmin, async (req, res) => {
-  const kind = String(req.body?.kind || '');
-  const amount = Number(req.body?.amount);
-  const note = String(req.body?.note || '').trim();
-  const date = String(req.body?.date || '').trim();
+app.post("/api/admin/finance", adminAuth, async (req, res) => {
+  const kind = String(req.body.kind || "");
+  const amount = Number(req.body.amount_reais);
+  const description = String(req.body.description || "").trim();
+  const date = String(req.body.date || "").trim();
 
-  if (!['in', 'out'].includes(kind) || !isFinite(amount) || amount <= 0 || !note || !parseDateISO(date)) {
-    return res.status(400).json({ error: 'bad_request' });
-  }
+  if (!["in", "out"].includes(kind)) return res.status(400).json({ ok: false, error: "kind inválido" });
+  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "valor inválido" });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ ok: false, error: "date inválida" });
 
   try {
-    await pool.query(
-      `INSERT INTO finance_moves(kind, amount, note, date) VALUES($1,$2,$3,$4)`,
-      [kind, amount.toFixed(2), note, date]
+    const p = getPool();
+    await p.query(
+      `INSERT INTO finance (kind, amount_cents, description, date)
+       VALUES ($1,$2,$3,$4)`,
+      [kind, Math.round(amount * 100), description, date]
     );
     res.json({ ok: true });
   } catch (e) {
-    console.error('finance add error:', e);
-    res.status(500).json({ error: 'db_error' });
+    console.error("finance add error:", e);
+    res.status(500).json({ ok: false, error: "db_error" });
   }
 });
 
-app.post('/api/admin/finance/delete', requireAdmin, async (req, res) => {
-  const id = Number(req.body?.id);
-  if (!id) return res.status(400).json({ error: 'bad_request' });
+// ---- Static ----
+app.use(express.static(path.join(__dirname, "public")));
 
+// fallback: SPA index
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// ---- Start ----
+(async () => {
   try {
-    await pool.query(`DELETE FROM finance_moves WHERE id=$1`, [id]);
-    res.json({ ok: true });
+    process.env.TZ = TZ;
+    await initDb();
+    app.listen(PORT, () => {
+      console.log(`Server running on ${PORT}`);
+      console.log(`OWNER_WHATSAPP=${OWNER_WHATSAPP}`);
+    });
   } catch (e) {
-    console.error('finance delete error:', e);
-    res.status(500).json({ error: 'db_error' });
+    console.error("FALHA AO INICIAR:", e.message);
+    process.exit(1);
   }
-});
-
-// Fallback: serve index for unknown routes (SPA-ish)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// -------------------- Start --------------------
-
-async function main() {
-  await ensureSchema();
-  console.log("DB schema ok");
-  const PORT = parseInt(process.env.PORT || "3000", 10);
-  app.listen(PORT, () => {
-    console.log("Server running on", PORT);
-  });
-}
-
-main().catch((e) => {
-  console.error("Fatal startup error:", e);
-  process.exit(1);
-});
+})();

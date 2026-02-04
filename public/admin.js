@@ -1,279 +1,220 @@
-(() => {
-  const $ = (id) => document.getElementById(id);
-  const loginCard = $("loginCard");
-  const app = $("app");
-  const pass = $("pass");
-  const loginBtn = $("loginBtn");
-  const loginMsg = $("loginMsg");
+const el = (id)=>document.getElementById(id);
+function onlyDigits(v){ return String(v||"").replace(/\D/g,""); }
+function toWaNumber(raw){
+  const dig = onlyDigits(raw);
+  if (dig.startsWith("55") && (dig.length === 12 || dig.length === 13)) return dig;
+  if (dig.length === 10 || dig.length === 11) return "55" + dig;
+  return dig;
+}
+function waLink(number, text){
+  return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
+}
+function formatDateISO(d){
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,"0");
+  const day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function toBRDate(iso){
+  const [y,m,d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+function reais(v){
+  // v string "12.34"
+  return "R$ " + String(v).replace(".", ",");
+}
 
-  const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
-  const normalizePhoneBR = (input) => {
-    let d = onlyDigits(input);
-    if (d.length === 10 || d.length === 11) d = '55' + d;
-    return d;
-  };
+async function fetchJSON(url, opts){
+  const r = await fetch(url, { credentials:"include", ...opts });
+  const j = await r.json();
+  if(!j.ok) throw new Error(j.error || "erro");
+  return j;
+}
 
+async function loadBookings(){
+  const date = el("admDate").value;
+  const j = await fetchJSON(`/api/admin/bookings?date=${encodeURIComponent(date)}`);
+  const rows = j.bookings;
 
-  const bDate = $("bDate");
-  const refreshBookings = $("refreshBookings");
-  const bookingsList = $("bookingsList");
-  const bookKpis = $("bookKpis");
+  const html = `
+  <table>
+    <thead>
+      <tr>
+        <th>Hora</th>
+        <th>Cliente</th>
+        <th>Serviço</th>
+        <th>Ticket</th>
+        <th>Status</th>
+        <th>Whats</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(b=>{
+        const st = b.status === "active" ? "neu" : (b.status === "done" ? "ok" : "bad");
+        const msg =
+`✅ Agendamento confirmado (Barbearia Suprema)
+Ticket: ${b.ticket}
+Cliente: ${b.name}
+Data: ${toBRDate(b.date)}
+Horário: ${b.start}
+Serviço: ${b.service_label}
+Valor: R$ ${b.price_reais}
 
-  const fKind = $("fKind");
-  const fAmount = $("fAmount");
-  const fNote = $("fNote");
-  const fDate = $("fDate");
-  const addMove = $("addMove");
-  const refreshFinance = $("refreshFinance");
-  const movesList = $("movesList");
-  const finKpis = $("finKpis");
-  const range = $("range");
-  const rangeDate = $("rangeDate");
+Guarde seu ticket.`;
+        const wa = waLink(toWaNumber(b.phone), msg);
 
-  const cfgLine = $("cfgLine");
+        return `
+        <tr>
+          <td><b>${b.start}</b></td>
+          <td>${b.name}<div class="muted2">${b.phone}</div></td>
+          <td>${b.service_label}</td>
+          <td><span class="pill">${b.ticket}</span></td>
+          <td><span class="pill ${st}">${b.status}</span></td>
+          <td><a class="ghost small" target="_blank" rel="noopener" href="${wa}">Whats</a></td>
+          <td>
+            <button class="ghost small" onclick="setStatus(${b.id},'done')">Feito</button>
+            <button class="ghost small" onclick="setStatus(${b.id},'cancelled')">Cancelar</button>
+            <button class="ghost small" onclick="setStatus(${b.id},'active')">Ativo</button>
+          </td>
+        </tr>`;
+      }).join("")}
+    </tbody>
+  </table>`;
+  el("admBookings").innerHTML = html;
+}
 
-  function digitsOnly(s){ return (s||"").replace(/\D+/g,""); }
-  function fmtTimeLabelFromMin(m){
-    const hh = String(Math.floor(m/60)).padStart(2,"0");
-    const mm = String(m%60).padStart(2,"0");
-    return `${hh}:${mm}`;
+window.setStatus = async (id, status)=>{
+  try{
+    await fetchJSON(`/api/admin/bookings/${id}`, {
+      method:"PATCH",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ status })
+    });
+    await loadBookings();
+  }catch(e){
+    alert("Erro: " + e.message);
   }
-  function escapeHtml(s){
-    return String(s||"").replace(/[&<>\"']/g, (c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
-  }
-  function money(v){ return `R$ ${v}`; }
+};
 
-  async function api(path, opts){
-    const res = await fetch(path, opts);
-    const data = await res.json().catch(()=>({}));
-    if(!res.ok) throw new Error(data.error || "Erro");
-    return data;
-  }
+// Finance
+function weekRange(today){
+  const d = new Date(today);
+  const day = d.getDay(); // 0=dom
+  const diffToMon = (day === 0 ? -6 : 1 - day);
+  const start = new Date(d);
+  start.setDate(d.getDate() + diffToMon);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return [start, end];
+}
+function monthRange(today){
+  const d = new Date(today);
+  const start = new Date(d.getFullYear(), d.getMonth(), 1);
+  const end = new Date(d.getFullYear(), d.getMonth()+1, 0);
+  return [start, end];
+}
 
-  async function loadConfig(){
-    const cfg = await api("/api/config");
-    cfgLine.textContent = `${cfg.shopName} • ${cfg.open} às ${cfg.close} • WhatsApp: ${cfg.whatsappBarbershop}`;
-  }
+async function loadFinance(){
+  const start = el("finStart").value;
+  const end = el("finEnd").value;
 
-  async function login(){
-    loginMsg.textContent = "";
-    try{
-      await api("/api/admin/login", {
-        method:"POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ password: pass.value })
-      });
-      loginCard.classList.add("hidden");
-      app.classList.remove("hidden");
-      await initApp();
-    }catch(e){
-      loginMsg.textContent = e.message;
-    }
-  }
+  const sum = await fetchJSON(`/api/admin/finance/summary?start=${start}&end=${end}`);
+  el("sumIn").textContent = reais(sum.total_in_reais);
+  el("sumOut").textContent = reais(sum.total_out_reais);
+  el("sumNet").textContent = reais(sum.net_reais);
 
-  loginBtn.addEventListener("click", login);
-  pass.addEventListener("keydown", (e)=>{ if(e.key==="Enter") login(); });
+  const list = await fetchJSON(`/api/admin/finance?start=${start}&end=${end}`);
+  const rows = list.items;
 
-  function setTodayInputs(){
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth()+1).padStart(2,"0");
-    const dd = String(d.getDate()).padStart(2,"0");
-    const iso = `${yyyy}-${mm}-${dd}`;
-    bDate.value = iso;
-    fDate.value = iso;
-    rangeDate.value = iso;
-  }
-
-  async function loadBookings(){
-    bookingsList.innerHTML = "Carregando...";
-    bookKpis.innerHTML = "";
-    const date = bDate.value;
-    try{
-      const data = await api(`/api/admin/bookings?date=${encodeURIComponent(date)}`);
-      const list = data.bookings || [];
-      const total = list.reduce((acc, b)=> acc + (b.price||0), 0);
-      bookKpis.innerHTML = `
-        <div class="kpi"><strong>${list.length}</strong><span>Agendamentos</span></div>
-        <div class="kpi"><strong>${money(total)}</strong><span>Valor total (dia)</span></div>
-      `;
-
-      if(list.length === 0){
-        bookingsList.innerHTML = `<div class="muted">Sem agendamentos para ${date}.</div>`;
-        return;
-      }
-
-      bookingsList.innerHTML = "";
-      for(const b of list){
-        const wa = `${data.whatsapp_link_prefix}${normalizePhoneBR(b.phone)}?text=${encodeURIComponent(
-          `Olá ${b.name}! ✅\n` +
-          `Seu horário foi confirmado na Barbearia.\n` +
-          `Data: ${b.date}\n` +
-          `Horário: ${b.time_label}\n` +
-          `Serviço: ${b.service_label}\n` +
-          `Valor: R$ ${b.price}\n\n` +
-          `Qualquer dúvida, chama a gente aqui.`
-        );
-
-        const item = document.createElement("div");
-        item.className = "item";
-        item.innerHTML = `
-          <div>
-            <strong>${escapeHtml(b.time_label)} • ${escapeHtml(b.service_label)}</strong>
-            <small>${escapeHtml(b.name)} • ${escapeHtml(b.phone)} • ${money(b.price)}</small>
-          </div>
-          <div class="actions">
-            <a class="pill" target="_blank" rel="noopener" href="${wa}">
-              <span aria-hidden="true" style="font-size:16px;line-height:1">📲</span>
-              WhatsApp cliente
-            </a>
-            <button class="btn danger" data-cancel="${b.id}">Cancelar</button>
-          </div>
+  const html = `
+  <table>
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Tipo</th>
+        <th>Descrição</th>
+        <th>Valor</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(it=>{
+        const pill = it.kind === "in" ? "ok" : "bad";
+        const label = it.kind === "in" ? "Entrada" : "Saída";
+        return `
+          <tr>
+            <td>${toBRDate(it.date)}</td>
+            <td><span class="pill ${pill}">${label}</span></td>
+            <td>${it.description || ""}</td>
+            <td><b>${reais(it.amount_reais)}</b></td>
+          </tr>
         `;
-        bookingsList.appendChild(item);
-      }
+      }).join("")}
+    </tbody>
+  </table>`;
+  el("finList").innerHTML = html;
+}
 
-      bookingsList.querySelectorAll("button[data-cancel]").forEach(btn=>{
-        btn.addEventListener("click", async ()=>{
-          const id = btn.getAttribute("data-cancel");
-          if(!confirm("Cancelar este agendamento?")) return;
-          try{
-            await api("/api/admin/cancel", {
-              method:"POST",
-              headers: {"Content-Type":"application/json"},
-              body: JSON.stringify({ id: Number(id) })
-            });
-            await loadBookings();
-          }catch(e){ alert(e.message); }
-        });
-      });
+async function addFinance(){
+  const kind = el("finKind").value;
+  const amount = Number(el("finAmount").value);
+  const date = el("finDate").value;
+  const desc = el("finDesc").value;
 
-    }catch(e){
-      bookingsList.innerHTML = `<div class="muted">Erro: ${escapeHtml(e.message)}</div>`;
-    }
+  if(!amount || amount <= 0) return alert("Informe um valor válido.");
+  if(!date) return alert("Informe a data.");
+
+  try{
+    await fetchJSON("/api/admin/finance", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ kind, amount_reais: amount, date, description: desc })
+    });
+    el("finAmount").value = "";
+    el("finDesc").value = "";
+    await loadFinance();
+  }catch(e){
+    alert("Erro: " + e.message);
   }
+}
 
-  function isoRange(base, which){
-    const d = new Date(base + "T00:00:00");
-    if(which === "week"){
-      // start monday
-      const day = (d.getDay()+6)%7; // 0 monday
-      const start = new Date(d); start.setDate(d.getDate()-day);
-      const end = new Date(start); end.setDate(start.getDate()+7);
-      return { start, end };
-    }
-    // month
-    const start = new Date(d.getFullYear(), d.getMonth(), 1);
-    const end = new Date(d.getFullYear(), d.getMonth()+1, 1);
-    return { start, end };
-  }
+async function init(){
+  const today = new Date();
+  el("admDate").value = formatDateISO(today);
 
-  function toISODate(d){
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth()+1).padStart(2,"0");
-    const dd = String(d.getDate()).padStart(2,"0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
+  // Finance default: mês atual
+  const [ms, me] = monthRange(today);
+  el("finStart").value = formatDateISO(ms);
+  el("finEnd").value = formatDateISO(me);
+  el("finDate").value = formatDateISO(today);
 
-  async function loadFinance(){
-    movesList.innerHTML = "Carregando...";
-    finKpis.innerHTML = "";
-    try{
-      const { start, end } = isoRange(rangeDate.value, range.value);
-      const data = await api(`/api/admin/finance?from=${encodeURIComponent(toISODate(start))}&to=${encodeURIComponent(toISODate(end))}`);
-      const moves = data.moves || [];
+  el("btnReload").addEventListener("click", loadBookings);
+  el("admDate").addEventListener("change", loadBookings);
 
-      finKpis.innerHTML = `
-        <div class="kpi"><strong>${money(data.bookings_total)}</strong><span>Entradas (agendamentos)</span></div>
-        <div class="kpi"><strong>${money(data.in_total)}</strong><span>Outras entradas</span></div>
-        <div class="kpi"><strong>${money(data.out_total)}</strong><span>Saídas</span></div>
-        <div class="kpi"><strong>${money(data.net_total)}</strong><span>Saldo (período)</span></div>
-      `;
-
-      if(moves.length === 0){
-        movesList.innerHTML = `<div class="muted">Sem movimentações no período.</div>`;
-        return;
-      }
-
-      movesList.innerHTML = "";
-      for(const m of moves){
-        const item = document.createElement("div");
-        item.className = "item";
-        item.innerHTML = `
-          <div>
-            <strong>${m.kind === "in" ? "Entrada" : "Saída"} • ${money(m.amount)}</strong>
-            <small>${escapeHtml(m.date)} • ${escapeHtml(m.note || "")}</small>
-          </div>
-        `;
-        movesList.appendChild(item);
-      }
-    }catch(e){
-      movesList.innerHTML = `<div class="muted">Erro: ${escapeHtml(e.message)}</div>`;
-    }
-  }
-
-  addMove.addEventListener("click", async ()=>{
-    const payload = {
-      kind: fKind.value,
-      amount: Number(fAmount.value),
-      note: fNote.value || "",
-      date: fDate.value
-    };
-    if(!payload.amount || payload.amount < 0){
-      alert("Informe o valor.");
-      return;
-    }
-    try{
-      await api("/api/admin/finance/add", {
-        method:"POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify(payload)
-      });
-      fAmount.value = "";
-      fNote.value = "";
-      await loadFinance();
-    }catch(e){
-      alert(e.message);
-    }
+  el("btnWeek").addEventListener("click", ()=>{
+    const [s,e]=weekRange(new Date());
+    el("finStart").value = formatDateISO(s);
+    el("finEnd").value = formatDateISO(e);
+    loadFinance();
+  });
+  el("btnMonth").addEventListener("click", ()=>{
+    const [s,e]=monthRange(new Date());
+    el("finStart").value = formatDateISO(s);
+    el("finEnd").value = formatDateISO(e);
+    loadFinance();
   });
 
-  refreshBookings.addEventListener("click", loadBookings);
-  refreshFinance.addEventListener("click", loadFinance);
-  range.addEventListener("change", loadFinance);
-  rangeDate.addEventListener("change", loadFinance);
-  bDate.addEventListener("change", loadBookings);
+  el("finStart").addEventListener("change", loadFinance);
+  el("finEnd").addEventListener("change", loadFinance);
+  el("btnAddFin").addEventListener("click", addFinance);
 
-  function setupTabs(){
-    document.querySelectorAll(".tab").forEach(btn=>{
-      btn.addEventListener("click", ()=>{
-        document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
-        btn.classList.add("active");
-        const t = btn.getAttribute("data-tab");
-        $("tab-bookings").style.display = t==="bookings" ? "" : "none";
-        $("tab-finance").style.display = t==="finance" ? "" : "none";
-        if(t==="bookings") loadBookings();
-        if(t==="finance") loadFinance();
-      });
-    });
-  }
-
-  async function initApp(){
-    setupTabs();
-    setTodayInputs();
-    await loadConfig();
+  try{
     await loadBookings();
     await loadFinance();
+  }catch(e){
+    alert("Erro (login expirou?): " + e.message + "\nVolte e faça login de novo.");
+    location.href="/admin/login";
   }
+}
 
-  // auto-check if already logged
-  (async ()=>{
-    try{
-      await api("/api/admin/me");
-      loginCard.classList.add("hidden");
-      app.classList.remove("hidden");
-      await initApp();
-    }catch(_){
-      // stay on login
-    }
-  })();
-})();
+init();

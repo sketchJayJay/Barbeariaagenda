@@ -1,30 +1,25 @@
-# Barbearia Suprema - Agendamentos (Coolify + PostgreSQL)
+# Barbearia Suprema - Agendamentos (Coolify + PostgreSQL) - V5
 
 ## Variáveis de ambiente (Coolify > Environment Variables)
-- `DATABASE_URL` (obrigatório)  
-  Ex: `postgres://usuario:senha@host:5432/postgres`
+- DATABASE_URL = (connection string do Postgres do Coolify)
+- ADMIN_PASSWORD = (senha da área do dono)  ex: 123456
+- OWNER_WHATSAPP = 32998195165  (número do dono, sem +55; opcional)
+- TZ = America/Sao_Paulo (opcional)
 
-- `ADMIN_PASSWORD` (obrigatório)  
-  Senha do dono para entrar em `/admin`
-
-- `WHATSAPP_BARBERSHOP` (opcional)  
-  Número da barbearia no formato com DDI+DDD+numero, só dígitos.  
-  Ex: `55998195165`
-
-- `BARBERSHOP_NAME` (opcional)  
-  Ex: `Barbearia Suprema`
-
-- `TIME_OPEN` (opcional) padrão `08:00`
-- `TIME_CLOSE` (opcional) padrão `20:00`
+## Portas
+- Porta do app: 3000
 
 ## Rotas
-- Site do cliente: `/`
-- Admin: `/admin`
+- Site: /
+- Área do dono: /admin
 
-## Observação importante sobre WhatsApp
-Enviar mensagem automática para o WhatsApp do cliente **sem clique** não é possível direto do navegador/servidor sem usar um provedor (Twilio, Z-API, etc).
-Aqui foi feito o modo **1 clique**: no painel Admin você clica e abre o WhatsApp já com a mensagem pronta para o cliente.
+## WhatsApp (importante)
+Este sistema NÃO envia mensagem automaticamente pelo WhatsApp (isso exige API paga/oficial).
+Ele gera o *ticket na tela* e oferece um botão "Abrir WhatsApp" com a mensagem pronta.
+O cliente só precisa clicar e enviar.
 
+## Banco (PostgreSQL)
+As tabelas são criadas automaticamente ao iniciar o servidor:
+- bookings
+- finance
 
-## Ticket do cliente
-Após confirmar o agendamento, o site mostra um **ticket** (com código) e já abre um link do WhatsApp com a mensagem pronta. O cliente só precisa tocar em **Enviar**.

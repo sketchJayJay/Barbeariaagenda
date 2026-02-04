@@ -1,222 +1,233 @@
-// Barbearia Suprema - Front (Agendamentos)
+const el = (id) => document.getElementById(id);
 
-const $ = (id) => document.getElementById(id);
+const state = {
+  services: [],
+  ownerWhatsapp: "32998195165",
+  selectedService: null,
+  selectedDate: null
+};
 
-let CONFIG = null;
-let SERVICES = [];
+function onlyDigits(v){ return String(v||"").replace(/\D/g,""); }
 
-function onlyDigits(s) { return String(s || '').replace(/\D/g, ''); }
-function normalizePhoneBR(input) {
-  let digits = onlyDigits(input);
-  if (digits.length === 10 || digits.length === 11) digits = '55' + digits;
-  return digits;
+function formatDateISO(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const day = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
 }
 
-function showMsg(text, type = 'info', html = false) {
-  const el = $('msg');
-  el.style.display = 'block';
-  el.className = 'note ' + type;
-  if (html) el.innerHTML = text;
-  else el.textContent = text;
+function toBRDate(iso){
+  const [y,m,d] = iso.split("-");
+  return `${d}/${m}/${y}`;
 }
 
-function renderTicket({ booking, ticket_text, whatsapp_url }) {
-  const safe = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function formatPhoneBR(raw){
+  const dig = onlyDigits(raw);
+  if (dig.length === 11) return `(${dig.slice(0,2)}) ${dig.slice(2,7)}-${dig.slice(7)}`;
+  if (dig.length === 10) return `(${dig.slice(0,2)}) ${dig.slice(2,6)}-${dig.slice(6)}`;
+  return raw;
+}
 
-  const wa = whatsapp_url || `https://wa.me/${normalizePhoneBR(booking.phone)}?text=${encodeURIComponent(ticket_text || '')}`;
+function toWaNumber(raw){
+  const dig = onlyDigits(raw);
+  if (dig.startsWith("55") && (dig.length === 12 || dig.length === 13)) return dig;
+  if (dig.length === 10 || dig.length === 11) return "55" + dig;
+  return dig;
+}
 
-  const html = `
-    <div class="ticket">
-      <div class="ticket__title">✅ Agendamento confirmado</div>
-      <div class="ticket__row"><b>Ticket:</b> <span class="mono">${safe(booking.ticket_code || '')}</span></div>
-      <div class="ticket__row"><b>Nome:</b> ${safe(booking.name)}</div>
-      <div class="ticket__row"><b>Telefone:</b> ${safe(booking.phone)}</div>
-      <div class="ticket__row"><b>Serviço:</b> ${safe(booking.service_label)}</div>
-      <div class="ticket__row"><b>Data:</b> ${safe(booking.date)} <b style="margin-left:10px">Horário:</b> ${safe(booking.time)}</div>
-      <div class="ticket__row"><b>Duração:</b> ${safe(booking.duration_min)} min <b style="margin-left:10px">Valor:</b> R$ ${safe(booking.price)}</div>
+function waLink(number, text){
+  return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
+}
 
-      <div class="ticket__actions">
-        <a class="btn btn-whatsapp" target="_blank" rel="noopener" href="${wa}">
-          <span class="wa">🟢</span> Enviar ticket no WhatsApp
-        </a>
-        <button class="btn btn-copy" type="button" id="copyTicket">Copiar ticket</button>
-      </div>
+async function loadServices(){
+  const r = await fetch("/api/services");
+  const j = await r.json();
+  if(!j.ok) throw new Error(j.error || "Falha em /api/services");
 
-      <div class="ticket__hint">Guarde este ticket. Se precisar alterar/cancelar, chame no WhatsApp.</div>
+  state.services = j.services;
+  if (j.owner_whatsapp) state.ownerWhatsapp = String(j.owner_whatsapp);
+  el("brandHours").textContent = `${j.open} às ${j.close}`;
 
-      <details style="margin-top:10px">
-        <summary>Ver mensagem completa</summary>
-        <pre class="ticket__pre">${safe(ticket_text || '')}</pre>
-      </details>
-    </div>
-  `;
-
-  showMsg(html, 'ok', true);
-
-  const btn = $('copyTicket');
-  btn?.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(ticket_text || '');
-      btn.textContent = 'Copiado ✅';
-      setTimeout(() => (btn.textContent = 'Copiar ticket'), 1500);
-    } catch {
-      alert('Não consegui copiar automaticamente. Segure e copie a mensagem no bloco "Ver mensagem completa".');
-    }
+  const sel = el("service");
+  sel.innerHTML = "";
+  j.services.forEach(s=>{
+    const opt = document.createElement("option");
+    opt.value = s.key;
+    opt.textContent = s.label;
+    opt.dataset.duration = s.duration_min;
+    opt.dataset.price = s.price_reais;
+    sel.appendChild(opt);
   });
 
-  // Tenta abrir automaticamente (pode ser bloqueado por pop-up)
-  try { window.open(wa, '_blank'); } catch {}
+  // Owner WhatsApp
+  // tenta pegar do backend via /api/health (owner não vem) -> fica no padrão
+  const ownerBtn = el("whatsOwner");
+  ownerBtn.href = waLink("55"+state.ownerWhatsapp, "Olá! Quero informações sobre outros serviços da Barbearia Suprema.");
 }
 
-async function api(path, opts) {
-  const r = await fetch(path, opts);
-  let data = null;
-  try { data = await r.json(); } catch {}
-  if (!r.ok) {
-    const err = (data && (data.error || data.message)) || `Erro ${r.status}`;
-    throw new Error(err);
+async function loadSlots(){
+  const date = el("date").value;
+  const serviceKey = el("service").value;
+  if(!date || !serviceKey) return;
+
+  el("slot").innerHTML = `<option value="">Carregando...</option>`;
+
+  const r = await fetch(`/api/slots?date=${encodeURIComponent(date)}&service=${encodeURIComponent(serviceKey)}`);
+  const j = await r.json();
+  if(!j.ok){
+    el("slot").innerHTML = `<option value="">(erro)</option>`;
+    throw new Error(j.error || "Falha em /api/slots");
   }
-  return data;
-}
 
-function money(n) {
-  return `R$ ${Number(n || 0).toFixed(0)}`;
-}
+  if(j.slots.length === 0){
+    el("slot").innerHTML = `<option value="">Sem horários disponíveis</option>`;
+    return;
+  }
 
-async function loadConfig() {
-  CONFIG = await api('/api/config');
-
-  $('shopName').textContent = CONFIG.barbershopName || 'Barbearia';
-  $('kpiOpen').textContent = CONFIG.open;
-  $('kpiClose').textContent = CONFIG.close;
-  $('shopHours').textContent = `${CONFIG.open} às ${CONFIG.close}`;
-
-  // WhatsApp topo
-  const phone = String(CONFIG.whatsappBarbershop || '').replace(/\D/g,'') || '55998195165';
-  const text = encodeURIComponent('Olá! Quero um serviço que não está na lista. Pode me ajudar?');
-  $('whatsPill').href = `https://wa.me/${phone}?text=${text}`;
-}
-
-async function loadServices() {
-  const data = await api('/api/services');
-  SERVICES = data.services || [];
-  const sel = $('service');
-  sel.innerHTML = '';
-  SERVICES.forEach((s) => {
-    const o = document.createElement('option');
-    o.value = s.key;
-    o.textContent = s.label;
-    sel.appendChild(o);
+  el("slot").innerHTML = `<option value="">Selecione...</option>`;
+  j.slots.forEach(s=>{
+    const opt = document.createElement("option");
+    opt.value = s.value;
+    opt.textContent = s.label;
+    el("slot").appendChild(opt);
   });
 }
 
-async function loadSlots() {
-  const date = $('date').value;
-  const service_key = $('service').value;
-
-  $('time').innerHTML = '';
-  const o0 = document.createElement('option');
-  o0.value = '';
-  o0.textContent = 'Selecione...';
-  $('time').appendChild(o0);
-
-  if (!date || !service_key) return;
-
-  try {
-    const data = await api(`/api/slots?date=${encodeURIComponent(date)}&service_key=${encodeURIComponent(service_key)}`);
-    const slots = data.slots || [];
-    slots.forEach((t) => {
-      const o = document.createElement('option');
-      o.value = t;
-      o.textContent = t;
-      $('time').appendChild(o);
-    });
-
-    if (slots.length === 0) showMsg('Sem horários disponíveis para esta data/serviço.', 'warn');
-    else showMsg('Selecione um horário disponível e confirme.', 'info');
-  } catch (e) {
-    showMsg(`Erro ao carregar horários: ${e.message}`, 'err');
-  }
+function updateServiceInfo(){
+  const opt = el("service").selectedOptions[0];
+  if(!opt) return;
+  const duration = opt.dataset.duration;
+  const price = opt.dataset.price;
+  el("serviceInfo").textContent = `${duration} min • R$ ${price}`;
 }
 
-function updateServiceInfo() {
-  const key = $('service').value;
-  const svc = SERVICES.find(s => s.key === key);
-  if (!svc) return;
-  $('meta').textContent = `${svc.duration_min} min • ${money(svc.price)}`;
+function showInitError(msg){
+  const box = el("initError");
+  box.style.display = "block";
+  box.textContent = msg;
 }
 
-async function main() {
-  await loadConfig();
-  await loadServices();
+function hideInitError(){
+  const box = el("initError");
+  box.style.display = "none";
+  box.textContent = "";
+}
 
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dd = String(today.getDate()).padStart(2, '0');
-  $('date').value = `${yyyy}-${mm}-${dd}`;
+function showTicket(b){
+  el("ticketCode").textContent = b.ticket;
+  el("tName").textContent = b.name;
+  el("tPhone").textContent = formatPhoneBR(b.phone);
+  el("tDate").textContent = toBRDate(b.date);
+  el("tTime").textContent = `${b.start} → ${b.end}`;
+  el("tService").textContent = `${b.service_label} (${b.duration_min} min)`;
+  el("tPrice").textContent = `R$ ${b.price_reais}`;
 
-  $('service').addEventListener('change', () => {
+  const msg =
+`✅ Agendamento confirmado (Barbearia Suprema)
+Ticket: ${b.ticket}
+Cliente: ${b.name}
+Data: ${toBRDate(b.date)}
+Horário: ${b.start}
+Serviço: ${b.service_label}
+Valor: R$ ${b.price_reais}
+
+Guarde seu ticket.`;
+
+  const wa = waLink(toWaNumber(b.phone), msg);
+  el("btnWhatsTicket").href = wa;
+
+  el("ticketBox").style.display = "block";
+}
+
+function hideTicket(){
+  el("ticketBox").style.display = "none";
+}
+
+async function init(){
+  try{
+    const today = new Date();
+    el("date").value = formatDateISO(today);
+
+    await loadServices();
     updateServiceInfo();
-    loadSlots();
+    await loadSlots();
+
+    hideInitError();
+  }catch(e){
+    console.error(e);
+    showInitError("Erro ao iniciar o site. Verifique o banco/variáveis no Coolify e faça Redeploy.");
+  }
+
+  el("service").addEventListener("change", async ()=>{
+    updateServiceInfo();
+    try{ await loadSlots(); }catch(e){ showInitError("Erro ao carregar horários. (DB)"); }
   });
-  $('date').addEventListener('change', loadSlots);
 
-  updateServiceInfo();
-  await loadSlots();
+  el("date").addEventListener("change", async ()=>{
+    try{ await loadSlots(); hideInitError(); }catch(e){ showInitError("Erro ao carregar horários. (DB)"); }
+  });
 
-  $('bookingForm').addEventListener('submit', async (ev) => {
+  el("bookingForm").addEventListener("submit", async (ev)=>{
     ev.preventDefault();
+    hideInitError();
+
     const payload = {
-      name: $('name').value.trim(),
-      phone: $('phone').value.trim(),
-      date: $('date').value,
-      service_key: $('service').value,
-      time: $('time').value,
+      name: el("name").value.trim(),
+      phone: el("phone").value.trim(),
+      date: el("date").value,
+      service_key: el("service").value,
+      start_min: Number(el("slot").value)
     };
 
-    if (!payload.name || !payload.phone || !payload.date || !payload.service_key || !payload.time) {
-      showMsg('Preencha nome, WhatsApp, data, serviço e horário.', 'warn');
+    if(!payload.start_min){
+      showInitError("Selecione um horário disponível.");
       return;
     }
 
-    $('submitBtn').disabled = true;
-    showMsg('Confirmando...', 'info');
-
-    try {
-      const data = await api('/api/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+    el("btnConfirm").disabled = true;
+    el("btnConfirm").textContent = "Confirmando...";
+    try{
+      const r = await fetch("/api/bookings", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify(payload)
       });
-
-      renderTicket(data);
-
-      // Tenta abrir o WhatsApp já com a mensagem pronta (alguns navegadores podem bloquear pop-up)
-      if (data && data.whatsapp_url) {
-        try { window.open(data.whatsapp_url, '_blank'); } catch (_) {}
+      const j = await r.json();
+      if(!j.ok){
+        showInitError(j.error || "Erro ao confirmar.");
+        return;
       }
 
-      // Recarrega slots para sumir o horário já agendado
+      showTicket(j.booking);
+      // Atualiza slots após reservar
       await loadSlots();
-
-      $('time').value = '';
-    } catch (e) {
-      if (e.message === 'slot_unavailable') {
-        showMsg('Esse horário acabou de ser ocupado. Escolha outro horário.', 'warn');
-        await loadSlots();
-      } else if (e.message === 'outside_hours') {
-        showMsg('Horário fora do funcionamento. Escolha outro.', 'warn');
-      } else {
-        showMsg(`Erro: ${e.message}`, 'err');
-      }
-    } finally {
-      $('submitBtn').disabled = false;
+    }catch(e){
+      console.error(e);
+      showInitError("Erro ao confirmar (DB).");
+    }finally{
+      el("btnConfirm").disabled = false;
+      el("btnConfirm").textContent = "Confirmar Agendamento";
     }
+  });
+
+  el("btnCopy").addEventListener("click", async ()=>{
+    try{
+      await navigator.clipboard.writeText(el("ticketCode").textContent);
+      el("btnCopy").textContent = "Copiado!";
+      setTimeout(()=> el("btnCopy").textContent = "Copiar ticket", 1200);
+    }catch{
+      // fallback
+      alert("Copie o ticket: " + el("ticketCode").textContent);
+    }
+  });
+
+  el("btnNew").addEventListener("click", ()=>{
+    hideTicket();
+    el("name").value = "";
+    el("phone").value = "";
+    el("slot").value = "";
+    el("name").focus();
   });
 }
 
-main().catch((e) => {
-  console.error(e);
-  showMsg('Erro ao iniciar o site.', 'err');
-});
+init();
