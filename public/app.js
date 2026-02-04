@@ -1,133 +1,217 @@
+// Barbearia Suprema - Front (Agendamentos)
+
 const $ = (id) => document.getElementById(id);
 
-const SERVICES = {
-  corte_sobrancelha: { label: "Corte + Sobrancelha", duration: 40, price: 40 },
-  corte: { label: "Corte", duration: 40, price: 35 },
-  corte_barba: { label: "Corte + Barba", duration: 50, price: 50 },
-  corte_pigmentacao: { label: "Corte + Pigmentação", duration: 60, price: 50 },
-  barba: { label: "Barba", duration: 20, price: 20 },
-  corte_barba_pigmentacao: { label: "Corte + Barba + Pigmentação", duration: 60, price: 60 },
-};
+let CONFIG = null;
+let SERVICES = [];
 
-function todayISO() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function onlyDigits(s) { return String(s || '').replace(/\D/g, ''); }
+function normalizePhoneBR(input) {
+  let digits = onlyDigits(input);
+  if (digits.length === 10 || digits.length === 11) digits = '55' + digits;
+  return digits;
 }
 
-function brl(v) {
-  try { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
-  catch { return `R$ ${v}`; }
+function showMsg(text, type = 'info', html = false) {
+  const el = $('msg');
+  el.style.display = 'block';
+  el.className = 'note ' + type;
+  if (html) el.innerHTML = text;
+  else el.textContent = text;
 }
 
-let WA_LINK = "https://wa.me/5532998195165";
+function renderTicket({ booking, ticket_text, whatsapp_url }) {
+  const safe = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-async function loadMeta() {
-  try {
-    const res = await fetch("/api/meta");
-    const data = await res.json();
-    if (data?.whatsapp_link) WA_LINK = data.whatsapp_link;
+  const wa = whatsapp_url || `https://wa.me/${normalizePhoneBR(booking.phone)}?text=${encodeURIComponent(ticket_text || '')}`;
 
-    const msg = encodeURIComponent("Oi! Não achei meu serviço na lista. Pode me ajudar? 😊");
-    $("waTop").href = `${WA_LINK}?text=${msg}`;
-    $("waOther").href = `${WA_LINK}?text=${msg}`;
-  } catch (_) {
-    // ignore
+  const html = `
+    <div class="ticket">
+      <div class="ticket__title">✅ Agendamento confirmado</div>
+      <div class="ticket__row"><b>Ticket:</b> <span class="mono">${safe(booking.ticket_code || '')}</span></div>
+      <div class="ticket__row"><b>Nome:</b> ${safe(booking.name)}</div>
+      <div class="ticket__row"><b>Telefone:</b> ${safe(booking.phone)}</div>
+      <div class="ticket__row"><b>Serviço:</b> ${safe(booking.service_label)}</div>
+      <div class="ticket__row"><b>Data:</b> ${safe(booking.date)} <b style="margin-left:10px">Horário:</b> ${safe(booking.time)}</div>
+      <div class="ticket__row"><b>Duração:</b> ${safe(booking.duration_min)} min <b style="margin-left:10px">Valor:</b> R$ ${safe(booking.price)}</div>
+
+      <div class="ticket__actions">
+        <a class="btn btn-whatsapp" target="_blank" rel="noopener" href="${wa}">
+          <span class="wa">🟢</span> Enviar ticket no WhatsApp
+        </a>
+        <button class="btn btn-copy" type="button" id="copyTicket">Copiar ticket</button>
+      </div>
+
+      <div class="ticket__hint">Guarde este ticket. Se precisar alterar/cancelar, chame no WhatsApp.</div>
+
+      <details style="margin-top:10px">
+        <summary>Ver mensagem completa</summary>
+        <pre class="ticket__pre">${safe(ticket_text || '')}</pre>
+      </details>
+    </div>
+  `;
+
+  showMsg(html, 'ok', true);
+
+  const btn = $('copyTicket');
+  btn?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(ticket_text || '');
+      btn.textContent = 'Copiado ✅';
+      setTimeout(() => (btn.textContent = 'Copiar ticket'), 1500);
+    } catch {
+      alert('Não consegui copiar automaticamente. Segure e copie a mensagem no bloco "Ver mensagem completa".');
+    }
+  });
+
+  // Tenta abrir automaticamente (pode ser bloqueado por pop-up)
+  try { window.open(wa, '_blank'); } catch {}
+}
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  let data = null;
+  try { data = await r.json(); } catch {}
+  if (!r.ok) {
+    const err = (data && (data.error || data.message)) || `Erro ${r.status}`;
+    throw new Error(err);
   }
+  return data;
 }
 
-function renderServiceInfo() {
-  const key = $("service").value;
-  const s = SERVICES[key];
-  $("serviceInfo").textContent = s ? `${s.duration} min • ${brl(s.price)}` : "";
+function money(n) {
+  return `R$ ${Number(n || 0).toFixed(0)}`;
+}
+
+async function loadConfig() {
+  CONFIG = await api('/api/config');
+
+  $('shopName').textContent = CONFIG.barbershopName || 'Barbearia';
+  $('kpiOpen').textContent = CONFIG.open;
+  $('kpiClose').textContent = CONFIG.close;
+  $('shopHours').textContent = `${CONFIG.open} às ${CONFIG.close}`;
+
+  // WhatsApp topo
+  const phone = String(CONFIG.whatsappBarbershop || '').replace(/\D/g,'') || '55998195165';
+  const text = encodeURIComponent('Olá! Quero um serviço que não está na lista. Pode me ajudar?');
+  $('whatsPill').href = `https://wa.me/${phone}?text=${text}`;
+}
+
+async function loadServices() {
+  const data = await api('/api/services');
+  SERVICES = data.services || [];
+  const sel = $('service');
+  sel.innerHTML = '';
+  SERVICES.forEach((s) => {
+    const o = document.createElement('option');
+    o.value = s.key;
+    o.textContent = s.label;
+    sel.appendChild(o);
+  });
 }
 
 async function loadSlots() {
-  const date = $("date").value;
-  const service = $("service").value;
-  const sel = $("time");
-  sel.innerHTML = "";
+  const date = $('date').value;
+  const service_key = $('service').value;
 
-  if (!date || !service) return;
+  $('time').innerHTML = '';
+  const o0 = document.createElement('option');
+  o0.value = '';
+  o0.textContent = 'Selecione...';
+  $('time').appendChild(o0);
 
-  $("msg").textContent = "Carregando horários...";
+  if (!date || !service_key) return;
+
   try {
-    const res = await fetch(`/api/slots?date=${encodeURIComponent(date)}&service=${encodeURIComponent(service)}`);
-    const data = await res.json();
-
-    if (!res.ok) {
-      $("msg").textContent = data?.error === "db_error"
-        ? "Erro: db_error (banco desconectado ou tabela não criada)"
-        : (data?.error || "Erro ao carregar horários.");
-      return;
-    }
-
-    if (!Array.isArray(data) || data.length === 0) {
-      $("msg").textContent = "Sem horários disponíveis para essa data/serviço.";
-      return;
-    }
-
-    data.forEach(t => {
-      const o = document.createElement("option");
+    const data = await api(`/api/slots?date=${encodeURIComponent(date)}&service_key=${encodeURIComponent(service_key)}`);
+    const slots = data.slots || [];
+    slots.forEach((t) => {
+      const o = document.createElement('option');
       o.value = t;
       o.textContent = t;
-      sel.appendChild(o);
+      $('time').appendChild(o);
     });
 
-    $("msg").textContent = "";
+    if (slots.length === 0) showMsg('Sem horários disponíveis para esta data/serviço.', 'warn');
+    else showMsg('Selecione um horário disponível e confirme.', 'info');
   } catch (e) {
-    $("msg").textContent = "Falha ao carregar horários.";
+    showMsg(`Erro ao carregar horários: ${e.message}`, 'err');
   }
 }
 
-async function book() {
-  const payload = {
-    name: $("name").value.trim(),
-    phone: $("phone").value.trim(),
-    date: $("date").value,
-    time: $("time").value,
-    serviceKey: $("service").value,
-  };
+function updateServiceInfo() {
+  const key = $('service').value;
+  const svc = SERVICES.find(s => s.key === key);
+  if (!svc) return;
+  $('meta').textContent = `${svc.duration_min} min • ${money(svc.price)}`;
+}
 
-  if (!payload.name || !payload.phone || !payload.date || !payload.time || !payload.serviceKey) {
-    $("msg").textContent = "Preencha nome, telefone, data, serviço e horário.";
-    return;
-  }
+async function main() {
+  await loadConfig();
+  await loadServices();
 
-  $("msg").textContent = "Salvando...";
-  try {
-    const res = await fetch("/api/bookings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  $('date').value = `${yyyy}-${mm}-${dd}`;
 
-    if (!res.ok) {
-      $("msg").textContent = data?.error === "slot_taken"
-        ? "Esse horário acabou de ser ocupado. Tente outro."
-        : (data?.error || "Erro ao agendar.");
+  $('service').addEventListener('change', () => {
+    updateServiceInfo();
+    loadSlots();
+  });
+  $('date').addEventListener('change', loadSlots);
+
+  updateServiceInfo();
+  await loadSlots();
+
+  $('bookingForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const payload = {
+      name: $('name').value.trim(),
+      phone: $('phone').value.trim(),
+      date: $('date').value,
+      service_key: $('service').value,
+      time: $('time').value,
+    };
+
+    if (!payload.name || !payload.phone || !payload.date || !payload.service_key || !payload.time) {
+      showMsg('Preencha nome, WhatsApp, data, serviço e horário.', 'warn');
       return;
     }
 
-    $("msg").textContent = "Agendado ✅";
-    await loadSlots();
-  } catch (_) {
-    $("msg").textContent = "Erro ao agendar.";
-  }
+    $('submitBtn').disabled = true;
+    showMsg('Confirmando...', 'info');
+
+    try {
+      const data = await api('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      renderTicket(data);
+
+      // Recarrega slots para sumir o horário já agendado
+      await loadSlots();
+
+      $('time').value = '';
+    } catch (e) {
+      if (e.message === 'slot_unavailable') {
+        showMsg('Esse horário acabou de ser ocupado. Escolha outro horário.', 'warn');
+        await loadSlots();
+      } else if (e.message === 'outside_hours') {
+        showMsg('Horário fora do funcionamento. Escolha outro.', 'warn');
+      } else {
+        showMsg(`Erro: ${e.message}`, 'err');
+      }
+    } finally {
+      $('submitBtn').disabled = false;
+    }
+  });
 }
 
-$("date").value = todayISO();
-
-$("service").addEventListener("change", () => {
-  renderServiceInfo();
-  loadSlots();
+main().catch((e) => {
+  console.error(e);
+  showMsg('Erro ao iniciar o site.', 'err');
 });
-$("date").addEventListener("change", loadSlots);
-$("btnBook").addEventListener("click", book);
-
-renderServiceInfo();
-loadMeta();
-loadSlots();

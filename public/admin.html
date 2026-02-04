@@ -2,55 +2,208 @@
 <html lang="pt-br">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Admin | Barbearia Suprema</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin • Barbearia Suprema</title>
+  <link rel="icon" href="/logo.jpeg" />
+  <style>
+    :root{
+      --bg1:#0c0c10;
+      --bg2:#1a0b10;
+      --card: rgba(20,20,24,.75);
+      --stroke: rgba(255,255,255,.10);
+      --txt:#f2f2f2;
+      --muted: rgba(255,255,255,.72);
+      --accent:#e53935;
+      --accent2:#ff5252;
+      --ok:#39d98a;
+      --danger:#ff5252;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      color:var(--txt);
+      min-height:100vh;
+      background: radial-gradient(1000px 520px at 15% 0%, rgba(229,57,53,.18), transparent 60%),
+                  radial-gradient(1000px 520px at 85% 0%, rgba(0,120,255,.12), transparent 55%),
+                  linear-gradient(160deg,var(--bg1),var(--bg2));
+      overflow-x:hidden;
+    }
+    .wrap{max-width:1180px;margin:0 auto;padding:26px 14px 70px;}
+    .top{
+      display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;
+    }
+    .brand{display:flex;align-items:center;gap:12px;}
+    .brand img{width:54px;height:54px;border-radius:14px;border:1px solid var(--stroke);object-fit:cover;}
+    .brand h1{margin:0;font-size:18px}
+    .brand p{margin:4px 0 0;font-size:12px;color:var(--muted)}
+    .card{
+      background: var(--card);
+      border:1px solid var(--stroke);
+      border-radius:22px;
+      padding:16px;
+      box-shadow: 0 18px 60px rgba(0,0,0,.35);
+      backdrop-filter: blur(14px);
+    }
+    .row{display:grid;grid-template-columns: 1fr;gap:14px;}
+    .grid{display:grid;grid-template-columns: 1.1fr .9fr;gap:14px;}
+    @media (max-width: 960px){.grid{grid-template-columns:1fr}}
+    .tabs{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;}
+    .tab{
+      padding:10px 12px;border-radius:999px;border:1px solid var(--stroke);
+      background: rgba(0,0,0,.25);color:var(--txt);cursor:pointer;
+      font-size:13px;
+    }
+    .tab.active{background:rgba(229,57,53,.15);border-color:rgba(229,57,53,.35)}
+    label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
+    input, select, textarea{
+      width:100%;
+      padding:10px 10px;border-radius:14px;border:1px solid var(--stroke);
+      background: rgba(0,0,0,.25);color:var(--txt);outline:none;
+    }
+    textarea{min-height:72px;resize:vertical}
+    .btn{
+      border:none;border-radius:14px;padding:10px 12px;cursor:pointer;
+      background: linear-gradient(135deg,var(--accent),var(--accent2));
+      color:#fff;font-weight:700;
+    }
+    .btn.ghost{background: rgba(0,0,0,.25);border:1px solid var(--stroke);font-weight:600}
+    .btn.danger{background: rgba(255,82,82,.15);border:1px solid rgba(255,82,82,.35)}
+    .btn.ok{background: rgba(57,217,138,.15);border:1px solid rgba(57,217,138,.35)}
+    .list{margin-top:12px;display:flex;flex-direction:column;gap:10px;}
+    .item{
+      border:1px solid var(--stroke);
+      background: rgba(0,0,0,.22);
+      border-radius:18px;
+      padding:12px;
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .item strong{display:block;font-size:14px}
+    .item small{color:var(--muted)}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:9px 12px;border-radius:999px;border:1px solid var(--stroke);
+      background: rgba(0,0,0,.20);text-decoration:none;color:var(--txt);font-size:12px;
+    }
+    .pill svg{width:16px;height:16px}
+    .muted{color:var(--muted);font-size:12px}
+    .hidden{display:none}
+    .kpis{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
+    .kpi{flex:1;min-width:190px;border:1px solid var(--stroke);border-radius:18px;padding:12px;background: rgba(0,0,0,.22);}
+    .kpi strong{display:block;font-size:16px}
+    .kpi span{color:var(--muted);font-size:12px}
+    .login{
+      max-width:420px;margin:60px auto 0;
+    }
+  </style>
 </head>
 <body>
-  <header class="top">
-    <div class="brand">
-      <img class="brand-logo" src="/assets/logo.jpg" alt="Logo da Barbearia" onerror="this.style.display='none'">
-      <div class="brand-text">
-        <h1>Admin</h1>
-        <p>Agendamentos</p>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <img src="/logo.jpeg" alt="Logo" />
+        <div>
+          <h1>Admin • Barbearia</h1>
+          <p class="muted">Agendamentos + Financeiro (senha)</p>
+        </div>
+      </div>
+      <a class="pill" href="/" target="_blank" rel="noopener">Abrir site do cliente</a>
+    </div>
+
+    <div class="card login" id="loginCard">
+      <h2 style="margin:0 0 10px">Entrar</h2>
+      <div class="muted">Digite a senha do dono (configurada em <code>ADMIN_PASSWORD</code> no Coolify).</div>
+      <div style="margin-top:12px">
+        <label>Senha</label>
+        <input id="pass" type="password" placeholder="••••••••" />
+      </div>
+      <div style="margin-top:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+        <button class="btn" id="loginBtn">Entrar</button>
+        <span class="muted" id="loginMsg"></span>
       </div>
     </div>
 
-    <div class="top-actions">
-      <a class="btn ghost" href="/">Voltar</a>
-      <a class="btn ghost" href="/finance.html">Financeiro</a>
+    <div class="row hidden" id="app">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+          <div>
+            <h2 style="margin:0 0 6px">Painel</h2>
+            <div class="muted" id="cfgLine"></div>
+          </div>
+          <div class="tabs">
+            <button class="tab active" data-tab="bookings">Agendamentos</button>
+            <button class="tab" data-tab="finance">Financeiro</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <section class="card" id="tab-bookings">
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:end">
+            <div style="flex:1;min-width:220px">
+              <label>Data</label>
+              <input id="bDate" type="date" />
+            </div>
+            <button class="btn ghost" id="refreshBookings">Atualizar</button>
+          </div>
+
+          <div class="kpis" id="bookKpis"></div>
+          <div class="list" id="bookingsList"></div>
+        </section>
+
+        <aside class="card" id="tab-finance" style="display:none">
+          <h2 style="margin:0 0 10px">Financeiro</h2>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label>Tipo</label>
+              <select id="fKind">
+                <option value="in">Entrada</option>
+                <option value="out">Saída</option>
+              </select>
+            </div>
+            <div>
+              <label>Valor (R$)</label>
+              <input id="fAmount" type="number" min="0" step="1" placeholder="Ex: 50" />
+            </div>
+            <div style="grid-column:1/-1">
+              <label>Descrição</label>
+              <input id="fNote" placeholder="Ex: Produto / Aluguel / Caixa" />
+            </div>
+            <div style="grid-column:1/-1">
+              <label>Data</label>
+              <input id="fDate" type="date" />
+            </div>
+            <div style="grid-column:1/-1; display:flex; gap:10px; flex-wrap:wrap">
+              <button class="btn ok" id="addMove">Lançar</button>
+              <button class="btn ghost" id="refreshFinance">Atualizar</button>
+            </div>
+          </div>
+
+          <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:end">
+            <div style="flex:1;min-width:160px">
+              <label>Filtro</label>
+              <select id="range">
+                <option value="week">Semana</option>
+                <option value="month" selected>Mês</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:160px">
+              <label>Base</label>
+              <input id="rangeDate" type="date" />
+            </div>
+          </div>
+
+          <div class="kpis" id="finKpis"></div>
+          <div class="list" id="movesList"></div>
+        </aside>
+      </div>
     </div>
-  </header>
-
-  <main class="wrap one">
-    <section class="card">
-      <h2>Acesso</h2>
-      <div class="grid">
-        <label class="full">
-          Senha do Admin
-          <input id="pass" type="password" placeholder="Digite a senha do admin" />
-        </label>
-      </div>
-      <button class="btn" id="btnLogin">Entrar</button>
-      <p class="hint" id="msg"></p>
-    </section>
-
-    <section class="card">
-      <h2>Agendamentos</h2>
-      <div class="grid">
-        <label>
-          Filtrar por data
-          <input id="filterDate" type="date" />
-        </label>
-        <label>
-          Ação
-          <button class="btn ghost" id="btnRefresh" type="button">Atualizar</button>
-        </label>
-      </div>
-
-      <div class="table" id="table"></div>
-    </section>
-  </main>
+  </div>
 
   <script src="/admin.js"></script>
 </body>
