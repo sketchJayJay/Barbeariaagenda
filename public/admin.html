@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin | Barbearia Suprema</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <h1>Admin</h1>
+      <p>Listar e cancelar agendamentos</p>
+    </div>
+    <a class="adminLink" href="/">Voltar</a>
+  </header>
+
+  <main class="card">
+    <section class="grid">
+      <label>
+        <span>Senha do Admin</span>
+        <input id="pass" type="password" placeholder="ADMIN_PASSWORD" />
+      </label>
+      <label>
+        <span>Filtrar por data (opcional)</span>
+        <input id="date" type="date" />
+      </label>
+    </section>
+
+    <div class="actions">
+      <button id="btnLoad">Carregar</button>
+      <button id="btnCsv" class="secondary">Exportar CSV</button>
+    </div>
+
+    <div class="tableWrap">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Início</th>
+            <th>Fim</th>
+            <th>Serviço</th>
+            <th>Cliente</th>
+            <th>WhatsApp</th>
+            <th>Status</th>
+            <th>Código</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <p id="msg" class="msg"></p>
+  </main>
+
+  <script src="/admin.js"></script>
+</body>
+</html>

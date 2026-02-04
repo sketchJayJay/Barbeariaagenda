@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Barbearia Suprema | Agendamentos</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <img class="logo" src="/logo.jpeg" alt="Logo Barbearia" onerror="this.style.display='none'"/>
+      <div>
+        <h1>Barbearia Suprema</h1>
+        <p>Agende seu horário online ✂️</p>
+      </div>
+    </div>
+    <a class="adminLink" href="/admin.html">Admin</a>
+  </header>
+
+  <main class="card">
+    <section class="grid">
+      <label>
+        <span>Data</span>
+        <input id="date" type="date" />
+      </label>
+
+      <label>
+        <span>Serviço</span>
+        <select id="service"></select>
+      </label>
+
+      <label class="full">
+        <span>Nome</span>
+        <input id="name" type="text" placeholder="Seu nome" />
+      </label>
+
+      <label class="full">
+        <span>WhatsApp (opcional)</span>
+        <input id="whats" type="tel" placeholder="(DDD) 9xxxx-xxxx" />
+      </label>
+    </section>
+
+    <div class="actions">
+      <button id="btnLoad">Ver horários</button>
+    </div>
+
+    <section>
+      <h2>Horários disponíveis</h2>
+      <div id="slots" class="slots"></div>
+      <p id="msg" class="msg"></p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <small>© Barbearia Suprema</small>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
