@@ -57,6 +57,70 @@ function clampDateStr(date) {
   return date;
 }
 
+
+function clampMonthStr(month) {
+  // Expect YYYY-MM, basic validation
+  if (!/^\d{4}-\d{2}$/.test(month)) return null;
+  return month;
+}
+
+function isoDateUTC(y, m, d) {
+  // month: 1-12
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.toISOString().slice(0, 10);
+}
+
+function addDays(dateStr, deltaDays) {
+  const parts = String(dateStr).split("-").map(Number);
+  const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  dt.setUTCDate(dt.getUTCDate() + Number(deltaDays));
+  return dt.toISOString().slice(0, 10);
+}
+
+function startOfISOWeek(dateStr) {
+  // Monday as start
+  const parts = String(dateStr).split("-").map(Number);
+  const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  const dow = dt.getUTCDay(); // 0=Sun..6=Sat
+  const offset = (dow + 6) % 7; // Mon=0..Sun=6
+  dt.setUTCDate(dt.getUTCDate() - offset);
+  return dt.toISOString().slice(0, 10);
+}
+
+function monthRange(monthStr) {
+  const [y, m] = String(monthStr).split("-").map(Number);
+  const from = isoDateUTC(y, m, 1);
+  // last day: day 0 of next month
+  const last = new Date(Date.UTC(y, m, 0));
+  const to = last.toISOString().slice(0, 10);
+  return { from, to };
+}
+
+function resolveFinanceRange(query) {
+  let range = String((query || {}).range || "day");
+  const date = clampDateStr(String((query || {}).date || ""));
+  const month = clampMonthStr(String((query || {}).month || ""));
+
+  if (range === "month") {
+    const mm = month || (date ? date.slice(0, 7) : null);
+    if (!mm) return { error: "month_required" };
+    const r = monthRange(mm);
+    return { range: "month", ...r, label: mm };
+  }
+
+  if (range === "week") {
+    if (!date) return { error: "date_required" };
+    const from = startOfISOWeek(date);
+    const to = addDays(from, 6);
+    return { range: "week", from, to, label: `${from}..${to}` };
+  }
+
+  // default day
+  if (!date) return { error: "date_required" };
+  return { range: "day", from: date, to: date, label: date };
+}
+
+
 function buildCandidateStarts(durationMin) {
   const start = timeToMin(OPEN_TIME);
   const end = timeToMin(CLOSE_TIME);
@@ -362,8 +426,8 @@ function requireFinance(req, res, next) {
 }
 
 app.get("/api/finance/summary", requireFinance, async (req, res) => {
-  const date = clampDateStr(String(req.query.date || ""));
-  if (!date) return res.status(400).json({ error: "date_required" });
+  const r = resolveFinanceRange(req.query || {});
+  if (r.error) return res.status(400).json({ error: r.error });
 
   try {
     const { rows } = await pool.query(
@@ -371,12 +435,12 @@ app.get("/api/finance/summary", requireFinance, async (req, res) => {
          COALESCE(SUM(amount) FILTER (WHERE type='in'), 0) AS total_in,
          COALESCE(SUM(amount) FILTER (WHERE type='out'), 0) AS total_out
        FROM finance_tx
-       WHERE date=$1`,
-      [date]
+       WHERE date >= $1 AND date <= $2`,
+      [r.from, r.to]
     );
     const totalIn = Number(rows[0]?.total_in || 0);
     const totalOut = Number(rows[0]?.total_out || 0);
-    res.json({ ok: true, date, total_in: totalIn, total_out: totalOut, net: totalIn - totalOut });
+    res.json({ ok: true, range: r.range, from: r.from, to: r.to, total_in: totalIn, total_out: totalOut, net: totalIn - totalOut });
   } catch (e) {
     console.error("finance summary error:", e);
     res.status(500).json({ error: "db_error" });
@@ -384,18 +448,18 @@ app.get("/api/finance/summary", requireFinance, async (req, res) => {
 });
 
 app.get("/api/finance/tx", requireFinance, async (req, res) => {
-  const date = clampDateStr(String(req.query.date || ""));
-  if (!date) return res.status(400).json({ error: "date_required" });
+  const r = resolveFinanceRange(req.query || {});
+  if (r.error) return res.status(400).json({ error: r.error });
 
   try {
     const { rows } = await pool.query(
       `SELECT id, date, type, amount, method, category, description, created_at
        FROM finance_tx
-       WHERE date=$1
-       ORDER BY created_at DESC, id DESC`,
-      [date]
+       WHERE date >= $1 AND date <= $2
+       ORDER BY date DESC, created_at DESC, id DESC`,
+      [r.from, r.to]
     );
-    res.json(rows);
+    res.json({ ok: true, range: r.range, from: r.from, to: r.to, rows });
   } catch (e) {
     console.error("finance list error:", e);
     res.status(500).json({ error: "db_error" });

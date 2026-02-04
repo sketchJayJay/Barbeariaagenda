@@ -12,7 +12,7 @@
       <img class="brand-logo" src="/assets/logo.jpg" alt="Logo da Barbearia" onerror="this.style.display='none'">
       <div class="brand-text">
         <h1>Financeiro</h1>
-        <p>Entradas e saídas do dia</p>
+        <p>Entradas e saídas</p>
       </div>
     </div>
 
@@ -26,34 +26,32 @@
     <section class="card" id="loginCard">
       <h2>Acesso do dono</h2>
       <div class="grid">
-        <label class="full">
-          Senha do Financeiro
-          <input id="finPass" type="password" placeholder="Digite a senha" />
-        </label>
-      </div>
-      <button class="btn" id="btnFinLogin">Entrar</button>
-      <p class="hint" id="finMsg"></p>
-    </section>
-
-    <section class="card hidden" id="finCard">
-      <h2>Resumo do dia</h2>
-
-      <div class="grid">
         <label>
-          Data
-          <input id="finDate" type="date" />
+          Período
+          <select id="finRange">
+            <option value="day">Dia</option>
+            <option value="week">Semana</option>
+            <option value="month">Mês</option>
+          </select>
         </label>
+
         <label>
           Ação
           <button class="btn ghost" id="btnFinRefresh" type="button">Atualizar</button>
         </label>
+
+        <label id="finDateWrap">
+          Data (lançamento)
+          <input id="finDate" type="date" />
+        </label>
+
+        <label id="finMonthWrap" class="hidden">
+          Mês
+          <input id="finMonth" type="month" />
+        </label>
       </div>
 
-      <div class="kpis">
-        <div class="kpi">
-          <div class="kpi-label">Entrou</div>
-          <div class="kpi-value" id="kpiIn">R$ 0,00</div>
-        </div>
+      <p class="hint" id="periodLabel"></p>
         <div class="kpi">
           <div class="kpi-label">Saiu</div>
           <div class="kpi-value" id="kpiOut">R$ 0,00</div>
@@ -108,7 +106,7 @@
 
       <hr class="sep"/>
 
-      <h3>Movimentos do dia</h3>
+      <h3>Movimentos</h3>
       <div class="table" id="txTable"></div>
     </section>
   </main>
