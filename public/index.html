@@ -9,13 +9,20 @@
 <body>
   <header class="top">
     <div class="brand">
-      <div class="logo"><img src="/assets/logo.png" alt="Barbearia Suprema" /></div>
-      <div>
+      <img class="brand-logo" src="/assets/logo.jpg" alt="Logo da Barbearia" onerror="this.style.display='none'">
+      <div class="brand-text">
         <h1>Barbearia Suprema</h1>
         <p>Agende seu horário online</p>
       </div>
     </div>
-    <a class="btn ghost" href="/admin.html">Área Admin</a>
+
+    <div class="top-actions">
+      <a class="btn ghost wa" id="waTop" href="#" target="_blank" rel="noopener">
+        <span class="wa-ic" aria-hidden="true"></span>
+        WhatsApp
+      </a>
+      <a class="btn ghost" href="/admin.html">Área Admin</a>
+    </div>
   </header>
 
   <main class="wrap">
@@ -30,7 +37,7 @@
 
         <label>
           Telefone (WhatsApp)
-          <input id="phone" placeholder="(xx) xxxxx-xxxx" />
+          <input id="phone" placeholder="(32) 9xxxx-xxxx" />
         </label>
 
         <label>
@@ -39,11 +46,6 @@
         </label>
 
         <label>
-          Horário
-          <select id="time"></select>
-        </label>
-
-        <label class="full">
           Serviço
           <select id="service">
             <option value="corte_sobrancelha">Corte + Sobrancelha (40 min) • R$ 40</option>
@@ -54,11 +56,23 @@
             <option value="corte_barba_pigmentacao">Corte + Barba + Pigmentação (60 min) • R$ 60</option>
           </select>
         </label>
+
+        <label class="full">
+          Horário disponível
+          <select id="time"></select>
+        </label>
+      </div>
+
+      <div class="row-between">
+        <p class="hint" id="serviceInfo"></p>
+        <a class="link wa-inline" id="waOther" href="#" target="_blank" rel="noopener">
+          <span class="wa-ic" aria-hidden="true"></span>
+          Não achou seu serviço? Fale no WhatsApp
+        </a>
       </div>
 
       <button class="btn" id="btnBook">Confirmar Agendamento</button>
 
-      <p class="hint" id="serviceInfo"></p>
       <p class="hint" id="msg"></p>
     </section>
 
@@ -66,10 +80,12 @@
       <h2>Como funciona</h2>
       <ul class="list">
         <li>Escolha a data, o serviço e um horário disponível.</li>
-        <li>Preencha seus dados e confirme.</li>
-        <li>O admin consegue ver e cancelar no painel.</li>
+        <li>Confirme. O sistema bloqueia o tempo do serviço (20/40/50/60 min).</li>
+        <li>Se o serviço não estiver na lista, clique no WhatsApp e peça orçamento/encaixe.</li>
       </ul>
-      <p class="hint">Teste rápido: <code>/api/health</code></p>
+      <p class="hint small">
+        Saúde do sistema: <code>/api/health</code>
+      </p>
     </section>
   </main>
 

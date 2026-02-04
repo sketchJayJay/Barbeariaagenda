@@ -9,16 +9,20 @@
 <body>
   <header class="top">
     <div class="brand">
-      <div class="logo"><img src="/assets/logo.png" alt="Barbearia Suprema" /></div>
-      <div>
+      <img class="brand-logo" src="/assets/logo.jpg" alt="Logo da Barbearia" onerror="this.style.display='none'">
+      <div class="brand-text">
         <h1>Admin</h1>
-        <p>Barbearia Suprema</p>
+        <p>Agendamentos</p>
       </div>
     </div>
-    <a class="btn ghost" href="/">Voltar</a>
+
+    <div class="top-actions">
+      <a class="btn ghost" href="/">Voltar</a>
+      <a class="btn ghost" href="/finance.html">Financeiro</a>
+    </div>
   </header>
 
-  <main class="wrap">
+  <main class="wrap one">
     <section class="card">
       <h2>Acesso</h2>
       <div class="grid">
@@ -35,7 +39,7 @@
       <h2>Agendamentos</h2>
       <div class="grid">
         <label>
-          Data (opcional)
+          Filtrar por data
           <input id="filterDate" type="date" />
         </label>
         <label>
@@ -45,87 +49,9 @@
       </div>
 
       <div class="table" id="table"></div>
-      <p class="hint">Dica: clique em "Atualizar" após logar.</p>
     </section>
   </main>
 
-  <script>
-    let token = "";
-
-    const msg = (t) => document.getElementById("msg").textContent = t;
-
-    async function fetchBookings() {
-      if (!token) return;
-      const d = document.getElementById("filterDate").value;
-      const url = d ? `/api/admin/bookings?date=${encodeURIComponent(d)}` : `/api/admin/bookings`;
-      const res = await fetch(url, { headers: { "x-admin-token": token } });
-      const data = await res.json();
-
-      if (!res.ok) {
-        msg(data.error || "Erro ao carregar.");
-        return;
-      }
-
-      const el = document.getElementById("table");
-      if (!data.length) {
-        el.innerHTML = "<p class='hint'>Nenhum agendamento encontrado.</p>";
-        return;
-      }
-
-      el.innerHTML = `
-        <div class="row head">
-          <div>Data</div><div>Hora</div><div>Nome</div><div>Telefone</div><div>Serviço</div><div>Duração</div><div>Preço</div><div>Status</div><div>Ações</div>
-        </div>
-        ${data.map(b => `
-          <div class="row">
-            <div>${b.date}</div>
-            <div>${b.time}</div>
-            <div>${b.name}</div>
-            <div>${b.phone}</div>
-            <div>${b.service_label}</div>
-            <div>${b.duration_min} min</div>
-            <div>R$ ${b.price}</div>
-            <div>${b.status}</div>
-            <div>
-              ${b.status === "active" ? `<button class="btn danger" type="button" onclick="cancelBooking(${b.id})">Cancelar</button>` : ""}
-            </div>
-          </div>
-        `).join("")}
-      `;
-    }
-
-    async function cancelBooking(id) {
-      const res = await fetch(`/api/admin/bookings/${id}/cancel`, {
-        method: "POST",
-        headers: { "x-admin-token": token }
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        msg(data.error || "Erro ao cancelar.");
-        return;
-      }
-      msg("Cancelado ✅");
-      fetchBookings();
-    }
-
-    window.cancelBooking = cancelBooking;
-
-    document.getElementById("btnLogin").onclick = async () => {
-      const pass = document.getElementById("pass").value.trim();
-      if (!pass) return msg("Digite a senha.");
-      const res = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pass })
-      });
-      const data = await res.json();
-      if (!res.ok) return msg(data.error || "Login falhou.");
-      token = data.token;
-      msg("Logado ✅");
-      fetchBookings();
-    };
-
-    document.getElementById("btnRefresh").onclick = fetchBookings;
-  </script>
+  <script src="/admin.js"></script>
 </body>
 </html>

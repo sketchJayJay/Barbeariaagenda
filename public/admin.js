@@ -1,99 +1,91 @@
-function qs(id){ return document.getElementById(id); }
-const elPass = qs("pass");
-const elDate = qs("date");
-const elTbl = qs("tbl").querySelector("tbody");
-const elMsg = qs("msg");
-const btnLoad = qs("btnLoad");
-const btnCsv = qs("btnCsv");
+const $ = (id) => document.getElementById(id);
+let token = "";
 
-function setMsg(t){ elMsg.textContent = t || ""; }
+function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
-async function api(path, opts = {}) {
-  const pass = elPass.value || "";
-  const res = await fetch(path, { 
-    headers: { 
-      "content-type": "application/json",
-      "x-admin-password": pass
-    }, 
-    ...opts 
+function timeFromMin(min) {
+  const h = String(Math.floor(min / 60)).padStart(2, "0");
+  const m = String(min % 60).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+function msg(t) { $("msg").textContent = t; }
+
+async function login() {
+  const pass = $("pass").value.trim();
+  if (!pass) return msg("Digite a senha.");
+  const res = await fetch("/api/admin/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: pass }),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "erro");
-  return data;
+  const data = await res.json();
+  if (!res.ok) return msg(data.error || "Falha no login.");
+  token = data.token;
+  msg("Logado ✅");
+  await fetchBookings();
 }
 
-function rowToCsv(r){
-  const vals = [r.date, r.start_time, r.end_time, r.service_name, r.client_name, r.client_whatsapp || "", r.status, r.code];
-  return vals.map(v => `"${String(v).replaceAll('"','""')}"`).join(",");
-}
-
-function downloadCsv(rows){
-  const head = '"Data","Início","Fim","Serviço","Cliente","WhatsApp","Status","Código"';
-  const body = rows.map(rowToCsv).join("\n");
-  const blob = new Blob([head + "\n" + body], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "agendamentos.csv";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
-
-function render(rows){
-  elTbl.innerHTML = "";
-  rows.forEach(r => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${r.date}</td>
-      <td>${r.start_time}</td>
-      <td>${r.end_time}</td>
-      <td>${r.service_name}</td>
-      <td>${r.client_name}</td>
-      <td>${r.client_whatsapp || ""}</td>
-      <td>${r.status}</td>
-      <td>${r.code}</td>
-      <td>${r.status === "confirmed" ? `<button class="cancel">Cancelar</button>` : ""}</td>
-    `;
-    const btn = tr.querySelector("button.cancel");
-    if (btn){
-      btn.onclick = async () => {
-        if (!confirm("Cancelar este agendamento?")) return;
-        btn.disabled = true;
-        try{
-          await api("/api/admin/cancel", { method:"POST", body: JSON.stringify({ id: r.id })});
-          setMsg("Cancelado.");
-          btnLoad.click();
-        }catch(e){
-          setMsg(e.message);
-        }finally{
-          btn.disabled = false;
-        }
-      };
-    }
-    elTbl.appendChild(tr);
-  });
-}
-
-btnLoad.onclick = async () => {
-  setMsg("Carregando...");
-  try{
-    const date = elDate.value;
-    const url = date ? `/api/admin/bookings?date=${encodeURIComponent(date)}` : "/api/admin/bookings";
-    const r = await api(url);
-    window.__rows = r.rows || [];
-    render(window.__rows);
-    setMsg(`OK. ${window.__rows.length} registros.`);
-  }catch(e){
-    setMsg(e.message);
+async function fetchBookings() {
+  if (!token) return;
+  const d = $("filterDate").value;
+  const url = d ? `/api/admin/bookings?date=${encodeURIComponent(d)}` : "/api/admin/bookings";
+  const res = await fetch(url, { headers: { "x-admin-token": token } });
+  const data = await res.json();
+  if (!res.ok) {
+    msg(data.error || "Erro ao carregar.");
+    return;
   }
-};
 
-btnCsv.onclick = () => {
-  const rows = window.__rows || [];
-  if (!rows.length) return setMsg("Nada para exportar.");
-  downloadCsv(rows);
-};
+  const el = $("table");
+  if (!Array.isArray(data) || data.length === 0) {
+    el.innerHTML = "<p class='hint'>Nenhum agendamento.</p>";
+    return;
+  }
 
-(function init(){
-  setMsg("Digite a senha e clique em Carregar.");
-})();
+  el.innerHTML = `
+    <div class="row head">
+      <div>Data</div><div>Hora</div><div>Nome</div><div>Telefone</div><div>Serviço</div><div>Status</div><div>Ações</div>
+    </div>
+    ${data.map(b => `
+      <div class="row">
+        <div>${b.date || ""}</div>
+        <div>${Number.isFinite(b.start_min) ? timeFromMin(b.start_min) : ""}</div>
+        <div>${b.name || ""}</div>
+        <div>${b.phone || ""}</div>
+        <div>${b.service_label || b.service_key || ""}</div>
+        <div>${b.status || ""}</div>
+        <div>
+          ${b.status === "active" ? `<button class="btn danger" data-id="${b.id}">Cancelar</button>` : ""}
+        </div>
+      </div>
+    `).join("")}
+  `;
+
+  el.querySelectorAll("button[data-id]").forEach(btn => {
+    btn.addEventListener("click", () => cancelBooking(btn.getAttribute("data-id")));
+  });
+}
+
+async function cancelBooking(id) {
+  if (!token) return;
+  const res = await fetch(`/api/admin/bookings/${id}/cancel`, {
+    method: "POST",
+    headers: { "x-admin-token": token },
+  });
+  const data = await res.json();
+  if (!res.ok) return msg(data.error || "Erro ao cancelar.");
+  msg("Cancelado ✅");
+  await fetchBookings();
+}
+
+$("filterDate").value = todayISO();
+
+$("btnLogin").addEventListener("click", login);
+$("btnRefresh").addEventListener("click", fetchBookings);
