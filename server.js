@@ -1,4 +1,3 @@
-\
 const express = require("express");
 const path = require("path");
 const crypto = require("crypto");
@@ -51,40 +50,118 @@ function getPool() {
 
 async function initDb() {
   const p = getPool();
-  // Cria tabelas e índices (idempotente)
+
+  // Base tables (idempotent)
   await p.query(`
     CREATE TABLE IF NOT EXISTS bookings (
       id SERIAL PRIMARY KEY,
-      ticket TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      service_key TEXT NOT NULL,
-      service_label TEXT NOT NULL,
-      duration_min INT NOT NULL,
-      price_cents INT NOT NULL,
-      date TEXT NOT NULL,
-      start_min INT NOT NULL,
-      end_min INT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'active',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      ticket TEXT,
+      name TEXT,
+      phone TEXT,
+      service_key TEXT,
+      service_label TEXT,
+      duration_min INT,
+      price_cents INT,
+      date TEXT,
+      start_min INT,
+      end_min INT,
+      status TEXT DEFAULT 'active',
+      created_at TIMESTAMP DEFAULT NOW()
     );
   `);
-
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date);`);
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_bookings_date_start ON bookings(date, start_min);`);
 
   await p.query(`
-    CREATE TABLE IF NOT EXISTS finance (
+    CREATE TABLE IF NOT EXISTS finance_entries (
       id SERIAL PRIMARY KEY,
-      kind TEXT NOT NULL CHECK (kind IN ('in', 'out')),
+      kind TEXT NOT NULL,
       amount_cents INT NOT NULL,
-      description TEXT,
+      label TEXT NOT NULL,
+      note TEXT,
       date TEXT NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_finance_date ON finance(date);`);
+
+  // Columns migration (supports older schemas like start_time/start_ts etc.)
+  const alters = [
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ticket TEXT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS name TEXT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS phone TEXT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS service_key TEXT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS service_label TEXT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS duration_min INT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS price_cents INT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS date TEXT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS start_min INT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS end_min INT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS status TEXT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS created_at TIMESTAMP;`,
+  ];
+  for (const q of alters) await p.query(q);
+
+  await p.query(`
+DO $$
+BEGIN
+  -- start_time/end_time stored as TEXT 'HH:MM'
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='start_time') THEN
+    UPDATE bookings
+      SET start_min = (split_part(start_time, ':', 1)::int * 60 + split_part(start_time, ':', 2)::int)
+    WHERE start_min IS NULL AND start_time IS NOT NULL;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='end_time') THEN
+    UPDATE bookings
+      SET end_min = (split_part(end_time, ':', 1)::int * 60 + split_part(end_time, ':', 2)::int)
+    WHERE end_min IS NULL AND end_time IS NOT NULL;
+  END IF;
+
+  -- start_ts/end_ts stored as TIMESTAMP
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='start_ts') THEN
+    UPDATE bookings
+      SET start_min = (EXTRACT(HOUR FROM start_ts)::int * 60 + EXTRACT(MINUTE FROM start_ts)::int)
+    WHERE start_min IS NULL AND start_ts IS NOT NULL;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='end_ts') THEN
+    UPDATE bookings
+      SET end_min = (EXTRACT(HOUR FROM end_ts)::int * 60 + EXTRACT(MINUTE FROM end_ts)::int)
+    WHERE end_min IS NULL AND end_ts IS NOT NULL;
+  END IF;
+
+  -- price stored as INT in reais (legacy)
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='price') THEN
+    UPDATE bookings
+      SET price_cents = price * 100
+    WHERE price_cents IS NULL AND price IS NOT NULL;
+  END IF;
+
+  -- duration stored as INT minutes (legacy)
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='duration') THEN
+    UPDATE bookings
+      SET duration_min = duration
+    WHERE duration_min IS NULL AND duration IS NOT NULL;
+  END IF;
+
+  -- Fill status/created_at
+  UPDATE bookings SET status = 'active' WHERE status IS NULL;
+  UPDATE bookings SET created_at = NOW() WHERE created_at IS NULL;
+
+  -- Ticket for older rows
+  UPDATE bookings
+    SET ticket = ('BS-' || upper(substring(md5(random()::text), 1, 6)))
+  WHERE ticket IS NULL;
+END $$;
+  `);
+
+  // Indexes
+  await p.query(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date);`);
+  await p.query(`CREATE INDEX IF NOT EXISTS idx_bookings_date_start ON bookings(date, start_min);`);
+  await p.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_bookings_ticket ON bookings(ticket);`);
+
+  // Finance indexes
+  await p.query(`CREATE INDEX IF NOT EXISTS idx_finance_date ON finance_entries(date);`);
 }
+
 
 function toHHMM(min) {
   const h = String(Math.floor(min / 60)).padStart(2, "0");
