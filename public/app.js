@@ -41,6 +41,17 @@ function waLink(number, text){
   return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
 }
 
+function refreshConfirmState(){
+  const btn = el("btnConfirm");
+  if(!btn) return;
+  const nameOk = (el("name")?.value || "").trim().length >= 2;
+  const phoneOk = onlyDigits(el("phone")?.value || "").length >= 10;
+  const dateOk = !!(el("date")?.value);
+  const serviceOk = !!(el("service")?.value);
+  const slotOk = !!(el("slot")?.value);
+  btn.disabled = !(nameOk && phoneOk && dateOk && serviceOk && slotOk);
+}
+
 async function loadServices(){
   const r = await fetch("/api/services");
   const j = await r.json();
@@ -73,35 +84,67 @@ async function loadSlots(silent = false){
   if(!date || !serviceKey) return;
 
   const prevSlot = el("slot").value;
+  const grid = el("slotGrid");
+  const hint = el("slotHint");
 
+  // estado de carregamento
   if (!silent) {
-    el("slot").innerHTML = `<option value="">Carregando...</option>`;
+    grid.innerHTML = `<div class="slot-loading">Carregando horários...</div>`;
+    hint.textContent = "";
   }
 
   const r = await fetch(`/api/slots?date=${encodeURIComponent(date)}&service=${encodeURIComponent(serviceKey)}`);
   const j = await r.json();
   if(!j.ok){
-    el("slot").innerHTML = `<option value="">(erro)</option>`;
+    grid.innerHTML = `<div class="slot-empty">(erro ao carregar horários)</div>`;
     throw new Error(j.error || "Falha em /api/slots");
   }
 
   if(j.slots.length === 0){
-    el("slot").innerHTML = `<option value="">Sem horários disponíveis</option>`;
+    grid.innerHTML = `<div class="slot-empty">Sem horários disponíveis</div>`;
+    el("slot").value = "";
+    hint.textContent = "Escolha outra data ou outro serviço.";
     return;
   }
 
-  el("slot").innerHTML = `<option value="">Selecione...</option>`;
+  // Renderiza slots como botões (cara de app)
+  grid.innerHTML = "";
   j.slots.forEach(s=>{
-    const opt = document.createElement("option");
-    opt.value = s.value;
-    opt.textContent = s.label;
-    el("slot").appendChild(opt);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "slotbtn";
+    btn.dataset.value = String(s.value);
+    btn.innerHTML = `<div class="slot-time">${s.label}</div><div class="slot-sub">Disponível</div>`;
+    btn.addEventListener("click", ()=>{
+      el("slot").value = String(s.value);
+      document.querySelectorAll(".slotbtn").forEach(b=>{
+        b.classList.toggle("active", b.dataset.value === String(s.value));
+      });
+      hint.textContent = `Selecionado: ${s.label}`;
+      refreshConfirmState();
+      // ajuda a guiar no celular
+      const name = el("name");
+      if (name && window.innerWidth <= 520) {
+        setTimeout(()=> name.scrollIntoView({behavior:"smooth", block:"start"}), 120);
+      }
+    });
+    grid.appendChild(btn);
   });
 
   // Mantém seleção (se ainda existir) quando atualiza automaticamente
   if (prevSlot && j.slots.some(s => String(s.value) === String(prevSlot))) {
-    el("slot").value = prevSlot;
+    el("slot").value = String(prevSlot);
+    document.querySelectorAll(".slotbtn").forEach(b=>{
+      b.classList.toggle("active", b.dataset.value === String(prevSlot));
+    });
+    const found = j.slots.find(s => String(s.value) === String(prevSlot));
+    if(found) hint.textContent = `Selecionado: ${found.label}`;
+  } else {
+    el("slot").value = "";
+    hint.textContent = "Toque em um horário para selecionar.";
   }
+
+  refreshConfirmState();
 }
 
 function startSlotAutoRefresh(){
@@ -150,9 +193,7 @@ WhatsApp do cliente: ${formatPhoneBR(b.phone)}
 Data: ${toBRDate(b.date)}
 Horário: ${b.start}
 Serviço: ${b.service_label}
-Valor: R$ ${b.price_reais}
-
-Para confirmar, responda este ticket ao cliente.`;
+Valor: R$ ${b.price_reais}`;
 
   const msgMe =
 `✅ Meu agendamento confirmado (Barbearia Suprema)
@@ -166,21 +207,32 @@ Valor: R$ ${b.price_reais}`;
   el("btnWhatsMe").href = waLink(toWaNumber(b.phone), msgMe);
 
   el("ticketBox").style.display = "block";
+  const ab = el("actionBar");
+  if (ab) ab.style.display = "none";
+  // no celular, desce direto no ticket
+  if (window.innerWidth <= 520) {
+    setTimeout(()=> el("ticketBox").scrollIntoView({behavior:"smooth", block:"start"}), 120);
+  }
 }
 
 function hideTicket(){
   el("ticketBox").style.display = "none";
+  const ab = el("actionBar");
+  if (ab) ab.style.display = "block";
 }
 
 async function init(){
   try{
     const today = new Date();
     el("date").value = formatDateISO(today);
+    el("date").min = formatDateISO(today);
 
     await loadServices();
     updateServiceInfo();
     await loadSlots();
     startSlotAutoRefresh();
+
+    refreshConfirmState();
 
     hideInitError();
   }catch(e){
@@ -191,11 +243,27 @@ async function init(){
   el("service").addEventListener("change", async ()=>{
     updateServiceInfo();
     try{ await loadSlots(); }catch(e){ showInitError("Erro ao carregar horários. (DB)"); }
+    refreshConfirmState();
+    if (window.innerWidth <= 520) {
+      setTimeout(()=> el("stepDate").scrollIntoView({behavior:"smooth", block:"start"}), 120);
+    }
   });
 
   el("date").addEventListener("change", async ()=>{
     try{ await loadSlots(); hideInitError(); }catch(e){ showInitError("Erro ao carregar horários. (DB)"); }
+    refreshConfirmState();
+    if (window.innerWidth <= 520) {
+      setTimeout(()=> el("stepTime").scrollIntoView({behavior:"smooth", block:"start"}), 120);
+    }
   });
+
+  el("name").addEventListener("input", refreshConfirmState);
+  el("phone").addEventListener("input", refreshConfirmState);
+
+  // PWA (cara de app)
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch(()=>{});
+  }
 
   el("bookingForm").addEventListener("submit", async (ev)=>{
     ev.preventDefault();
@@ -256,6 +324,10 @@ async function init(){
     el("name").value = "";
     el("phone").value = "";
     el("slot").value = "";
+    const hint = el("slotHint");
+    if (hint) hint.textContent = "";
+    document.querySelectorAll(".slotbtn").forEach(b=> b.classList.remove("active"));
+    refreshConfirmState();
     el("name").focus();
   });
 }

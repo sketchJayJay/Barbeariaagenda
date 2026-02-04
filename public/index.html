@@ -6,6 +6,11 @@
   <title>Barbearia Suprema • Agendamentos</title>
   <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" href="/assets/logo.jpeg" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0a0a12" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="/assets/icon-192.png" />
 </head>
 <body>
   <div class="bg"></div>
@@ -28,42 +33,61 @@
   <main class="wrap">
     <section class="card">
       <h2>Novo agendamento</h2>
-      <p class="muted">Escolha o serviço e o sistema vai mostrar apenas os horários disponíveis.</p>
+      <p class="muted">Toque nos passos abaixo. O sistema mostra apenas horários livres.</p>
+
+      <div class="steps" aria-hidden="true">
+        <div class="stepchip"><span>1</span> Serviço</div>
+        <div class="stepchip"><span>2</span> Data</div>
+        <div class="stepchip"><span>3</span> Horário</div>
+        <div class="stepchip"><span>4</span> Confirmar</div>
+      </div>
 
       <form id="bookingForm" autocomplete="off">
-        <div class="grid2">
+        <div class="stepcard" id="stepService">
+          <div class="stephead"><span class="dot">1</span> Serviço</div>
           <div class="field">
-            <label>Nome</label>
-            <input id="name" placeholder="Seu nome" required minlength="2" />
+            <select id="service" required></select>
           </div>
+          <div class="mini" id="serviceInfo"></div>
+        </div>
 
+        <div class="stepcard" id="stepDate">
+          <div class="stephead"><span class="dot">2</span> Data</div>
           <div class="field">
-            <label>Telefone (WhatsApp)</label>
-            <input id="phone" placeholder="(xx) xxxxx-xxxx" required />
-          </div>
-
-          <div class="field">
-            <label>Data</label>
             <input id="date" type="date" required />
           </div>
+          <div class="mini">Dica: se não aparecer horário, é porque lotou naquele dia.</div>
+        </div>
 
+        <div class="stepcard" id="stepTime">
+          <div class="stephead"><span class="dot">3</span> Horário disponível</div>
           <div class="field">
-            <label>Horário</label>
-            <select id="slot" required>
-              <option value="">Selecione...</option>
-            </select>
+            <div id="slotGrid" class="slotgrid" aria-live="polite"></div>
+            <input id="slot" type="hidden" />
+            <div class="mini" id="slotHint"></div>
           </div>
         </div>
 
-        <div class="field">
-          <label>Serviço</label>
-          <select id="service" required></select>
+        <div class="stepcard" id="stepClient">
+          <div class="stephead"><span class="dot">4</span> Seus dados</div>
+          <div class="grid2">
+            <div class="field">
+              <label>Nome</label>
+              <input id="name" placeholder="Seu nome" required minlength="2" autocomplete="name" />
+            </div>
+
+            <div class="field">
+              <label>Telefone (WhatsApp)</label>
+              <input id="phone" placeholder="(xx) xxxxx-xxxx" required inputmode="numeric" autocomplete="tel" />
+            </div>
+          </div>
         </div>
 
-        <button class="primary" id="btnConfirm" type="submit">Confirmar Agendamento</button>
-
-        <div class="mini" id="serviceInfo"></div>
         <div class="error" id="initError" style="display:none"></div>
+
+        <div class="actionbar" id="actionBar">
+          <button class="primary" id="btnConfirm" type="submit" disabled>Confirmar Agendamento</button>
+        </div>
       </form>
 
       <div id="ticketBox" class="ticket" style="display:none">
@@ -98,28 +122,30 @@
 </section>
 
     <aside class="card">
-      <h2>Como funciona</h2>
-      <ul>
-        <li>Horário de funcionamento: <b>08:00 às 20:00</b></li>
-        <li>Os horários ocupados somem automaticamente.</li>
-        <li>Se não aparecer horário, é porque lotou naquele dia.</li>
-        <li>Precisa de outro serviço? Clique no WhatsApp acima.</li>
-      </ul>
+      <details class="details" open>
+        <summary>Como funciona</summary>
+        <ul>
+          <li>Horário de funcionamento: <b>08:00 às 20:00</b></li>
+          <li>Os horários ocupados somem automaticamente.</li>
+          <li>Se não aparecer horário, é porque lotou naquele dia.</li>
+          <li>Precisa de outro serviço? Clique no WhatsApp acima.</li>
+        </ul>
 
-      <div class="statgrid">
-        <div class="stat">
-          <div class="stat-big">08:00</div>
-          <div class="stat-sub">Abertura</div>
+        <div class="statgrid">
+          <div class="stat">
+            <div class="stat-big">08:00</div>
+            <div class="stat-sub">Abertura</div>
+          </div>
+          <div class="stat">
+            <div class="stat-big">20:00</div>
+            <div class="stat-sub">Fechamento</div>
+          </div>
         </div>
-        <div class="stat">
-          <div class="stat-big">20:00</div>
-          <div class="stat-sub">Fechamento</div>
-        </div>
-      </div>
 
-      <div class="note">
-        <b>WhatsApp:</b> após confirmar, você verá o ticket e pode enviar a mensagem no WhatsApp em 1 clique.
-      </div>
+        <div class="note">
+          <b>WhatsApp:</b> após confirmar, você verá o ticket e pode enviar a mensagem no WhatsApp em 1 clique.
+        </div>
+      </details>
     </aside>
   </main>
 
