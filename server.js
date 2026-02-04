@@ -57,13 +57,15 @@ async function initDb() {
   await p.query(`
     CREATE TABLE IF NOT EXISTS bookings (
       id SERIAL PRIMARY KEY,
-      ticket TEXT,
+	      ticket TEXT,
+	      ticket_code TEXT,
       name TEXT,
       phone TEXT,
       service_key TEXT,
       service_label TEXT,
       duration_min INT,
-      price_cents INT,
+	      price INT,
+	      price_cents INT,
       date TEXT,
       start_min INT,
       end_min INT,
@@ -107,6 +109,7 @@ END $$;
   // Columns migration (supports older schemas like start_time/start_ts etc.)
   const alters = [
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ticket TEXT;`,
+	    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ticket_code TEXT;`,
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS name TEXT;`,
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS phone TEXT;`,
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS service_key TEXT;`,
@@ -181,6 +184,17 @@ BEGIN
   UPDATE bookings
     SET ticket = ('BS-' || upper(substring(md5(random()::text), 1, 6)))
   WHERE ticket IS NULL;
+
+	  -- Alguns bancos antigos têm ticket_code como NOT NULL
+	  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='ticket_code') THEN
+	    UPDATE bookings
+	      SET ticket_code = ticket
+	    WHERE ticket_code IS NULL AND ticket IS NOT NULL;
+
+	    UPDATE bookings
+	      SET ticket_code = ('BS-' || upper(substring(md5(random()::text), 1, 6)))
+	    WHERE ticket_code IS NULL;
+	  END IF;
 END $$;
   `);
 
@@ -400,12 +414,12 @@ app.post("/api/bookings", async (req, res) => {
       return res.status(409).json({ ok: false, error: "Horário acabou de ser ocupado. Escolha outro." });
     }
 
-    const ins = await client.query(
-      `INSERT INTO bookings (ticket, name, phone, service_key, service_label, duration_min, price, price_cents, date, start_min, end_min)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       RETURNING id, ticket, created_at`,
-      [ticket, name, phone, svc.key, svc.label, svc.duration_min, priceReais, priceCents, date, startMin, endMin]
-    );
+	  const ins = await client.query(
+	    `INSERT INTO bookings (ticket, ticket_code, name, phone, service_key, service_label, duration_min, price, price_cents, date, start_min, end_min)
+	     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+	     RETURNING id, ticket, ticket_code, created_at`,
+	    [ticket, ticket, name, phone, svc.key, svc.label, svc.duration_min, priceReais, priceCents, date, startMin, endMin]
+	  );
 
     await client.query("COMMIT");
 
@@ -653,6 +667,15 @@ app.get("*", (req, res) => {
     app.listen(PORT, () => {
       console.log(`Server running on ${PORT}`);
       console.log(`OWNER_WHATSAPP=${OWNER_WHATSAPP}`);
+
+      if (!ADMIN_PASSWORD) {
+        console.warn("ATENÇÃO: ADMIN_PASSWORD não foi configurado (admin ficará sem proteção adequada). Defina no Coolify.");
+      }
+      if (!FINANCE_PASSWORD) {
+        console.warn("ATENÇÃO: FINANCE_PASSWORD não foi configurado. Defina no Coolify.");
+      }
+
+      console.log("Admin: /admin/login | Financeiro: /finance/login");
     });
   } catch (e) {
     console.error("FALHA AO INICIAR:", e.message);
