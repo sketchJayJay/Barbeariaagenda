@@ -1,10 +1,10 @@
 :root {
-  --bg: #0b0c10;
+  --bg: #1a0b0b;
   --card: #12141b;
   --muted: #aab0c0;
   --text: #f2f4ff;
   --line: rgba(255,255,255,.08);
-  --brand: #ff3b3b;
+  --brand: #ff2d2d;
 }
 
 * { box-sizing: border-box; }
@@ -28,11 +28,18 @@ body {
 
 .brand { display: flex; gap: 12px; align-items: center; }
 .logo {
-  width: 44px; height: 44px;
-  border-radius: 14px;
-  display: grid; place-items: center;
-  background: linear-gradient(135deg, rgba(255,59,59,.9), rgba(255,59,59,.35));
-  font-weight: 800;
+  width: 92px;
+  height: 92px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+}
+.logo img{
+  width: 92px;
+  height: 92px;
+  object-fit: contain;
+  display:block;
 }
 
 h1 { margin: 0; font-size: 18px; }

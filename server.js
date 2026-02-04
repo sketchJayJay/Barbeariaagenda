@@ -98,6 +98,7 @@ app.get("/api/health", async (_req, res) => {
 });
 
 app.get("/api/slots", async (req, res) => {
+  try {
   const date = (req.query.date || "").toString();
   const serviceKey = (req.query.service || "").toString();
 
@@ -119,6 +120,10 @@ app.get("/api/slots", async (req, res) => {
   }
 
   res.json(possible);
+  } catch (e) {
+    console.error("slots error:", e);
+    return res.status(500).json({ error: "db_error" });
+  }
 });
 
 app.post("/api/bookings", async (req, res) => {

@@ -28,30 +28,52 @@ async function loadSlots() {
   const service = $("service").value;
   const sel = $("time");
   sel.innerHTML = "";
+  sel.disabled = true;
 
-  if (!date || !service) return;
+  const o0 = document.createElement("option");
+  o0.value = "";
+  o0.textContent = "Carregando horários...";
+  sel.appendChild(o0);
 
-  const res = await fetch(`/api/slots?date=${encodeURIComponent(date)}&service=${encodeURIComponent(service)}`);
-  const data = await res.json();
-
-  if (!res.ok) {
-    $("msg").textContent = data.error || "Erro ao carregar horários.";
+  if (!date || !service) {
+    $("msg").textContent = "Selecione data e serviço.";
     return;
   }
 
-  if (!data.length) {
-    $("msg").textContent = "Sem horários disponíveis para essa data/serviço.";
-    return;
+  try {
+    const res = await fetch(`/api/slots?date=${encodeURIComponent(date)}&service=${encodeURIComponent(service)}`);
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+
+    if (!res.ok) {
+      $("msg").textContent = (data && data.error) ? `Erro: ${data.error}` : `Erro ao carregar horários (${res.status}).`;
+      sel.innerHTML = "";
+      sel.disabled = true;
+      return;
+    }
+
+    if (!Array.isArray(data) || data.length === 0) {
+      $("msg").textContent = "Sem horários disponíveis para essa data/serviço.";
+      sel.innerHTML = "";
+      sel.disabled = true;
+      return;
+    }
+
+    sel.innerHTML = "";
+    data.forEach(t => {
+      const o = document.createElement("option");
+      o.value = t;
+      o.textContent = t;
+      sel.appendChild(o);
+    });
+
+    sel.disabled = false;
+    $("msg").textContent = "";
+  } catch (e) {
+    $("msg").textContent = "Falha ao buscar horários. Verifique se o banco (Postgres) está ligado e se DATABASE_URL está certo.";
+    sel.innerHTML = "";
+    sel.disabled = true;
   }
-
-  data.forEach(t => {
-    const o = document.createElement("option");
-    o.value = t;
-    o.textContent = t;
-    sel.appendChild(o);
-  });
-
-  $("msg").textContent = "";
 }
 
 async function book() {
