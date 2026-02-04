@@ -16,7 +16,30 @@ body{
     radial-gradient(900px 500px at 20% 10%, rgba(255,59,59,.18), transparent 60%),
     radial-gradient(900px 500px at 80% 30%, rgba(0,173,255,.16), transparent 60%),
     var(--bg);
+  position: relative;
+  min-height: 100vh;
 }
+
+body::before{
+  content:"";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("/assets/logo.jpg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: min(560px, 65vw);
+  opacity: 0.06;
+  filter: grayscale(1);
+  transform: rotate(-10deg);
+  z-index: 0;
+}
+
+.top, .wrap{
+  position: relative;
+  z-index: 1;
+}
+
 
 .top{
   display:flex;
