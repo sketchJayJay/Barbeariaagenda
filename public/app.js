@@ -192,6 +192,11 @@ async function main() {
 
       renderTicket(data);
 
+      // Tenta abrir o WhatsApp já com a mensagem pronta (alguns navegadores podem bloquear pop-up)
+      if (data && data.whatsapp_url) {
+        try { window.open(data.whatsapp_url, '_blank'); } catch (_) {}
+      }
+
       // Recarrega slots para sumir o horário já agendado
       await loadSlots();
 

@@ -11,7 +11,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // -------------------- Config --------------------
 const BARBERSHOP_NAME = process.env.BARBERSHOP_NAME || 'Barbearia Suprema';
-const WHATSAPP_BARBERSHOP = (process.env.WHATSAPP_BARBERSHOP || '55998195165').replace(/\D/g, '');
+// Número da barbearia (55 + DDD + número). Padrão: 55 32 998195165
+const WHATSAPP_BARBERSHOP = (process.env.WHATSAPP_BARBERSHOP || '5532998195165').replace(/\D/g, '');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'; // troque no Coolify!
 
 const TIME_OPEN = process.env.TIME_OPEN || '08:00';
@@ -117,26 +118,31 @@ async function ensureSchema() {
   if (!colset.has('start_min')) {
     // tenta migrar de start_time (HH:MM) se existir
     if (colset.has('start_time')) {
-      await pool.query(`ALTER TABLE bookings ADD COLUMN start_min INT;`);
-      await pool.query(`UPDATE bookings SET start_min = (split_part(start_time, ':', 1)::int*60 + split_part(start_time, ':', 2)::int) WHERE start_min IS NULL;`);
+      await pool.query(`ALTER TABLE bookings ADD COLUMN start_min INT NOT NULL DEFAULT 0;`);
+      // se a tabela antiga guardava start_time como texto HH:MM
+      await pool.query(`UPDATE bookings SET start_min = (split_part(start_time, ':', 1)::int*60 + split_part(start_time, ':', 2)::int)
+                        WHERE (start_min IS NULL OR start_min = 0) AND start_time IS NOT NULL;`);
     } else {
-      await pool.query(`ALTER TABLE bookings ADD COLUMN start_min INT DEFAULT 0;`);
+      await pool.query(`ALTER TABLE bookings ADD COLUMN start_min INT NOT NULL DEFAULT 0;`);
     }
-    await pool.query(`ALTER TABLE bookings ALTER COLUMN start_min SET NOT NULL;`);
+    await pool.query(`UPDATE bookings SET start_min = 0 WHERE start_min IS NULL;`);
+    try { await pool.query(`ALTER TABLE bookings ALTER COLUMN start_min SET NOT NULL;`); } catch (_) {}
   }
   if (!colset.has('end_min')) {
     if (colset.has('end_time')) {
-      await pool.query(`ALTER TABLE bookings ADD COLUMN end_min INT;`);
-      await pool.query(`UPDATE bookings SET end_min = (split_part(end_time, ':', 1)::int*60 + split_part(end_time, ':', 2)::int) WHERE end_min IS NULL;`);
+      await pool.query(`ALTER TABLE bookings ADD COLUMN end_min INT NOT NULL DEFAULT 0;`);
+      await pool.query(`UPDATE bookings SET end_min = (split_part(end_time, ':', 1)::int*60 + split_part(end_time, ':', 2)::int)
+                        WHERE (end_min IS NULL OR end_min = 0) AND end_time IS NOT NULL;`);
     } else {
-      await pool.query(`ALTER TABLE bookings ADD COLUMN end_min INT DEFAULT 0;`);
+      await pool.query(`ALTER TABLE bookings ADD COLUMN end_min INT NOT NULL DEFAULT 0;`);
     }
-    await pool.query(`ALTER TABLE bookings ALTER COLUMN end_min SET NOT NULL;`);
+    await pool.query(`UPDATE bookings SET end_min = 0 WHERE end_min IS NULL;`);
+    try { await pool.query(`ALTER TABLE bookings ALTER COLUMN end_min SET NOT NULL;`); } catch (_) {}
   }
   if (!colset.has('ticket_code')) {
-    await pool.query(`ALTER TABLE bookings ADD COLUMN ticket_code TEXT;`);
-    await pool.query(`UPDATE bookings SET ticket_code = 'BS-' || id || '-' || replace(date,'-','') WHERE ticket_code IS NULL;`);
-    await pool.query(`ALTER TABLE bookings ALTER COLUMN ticket_code SET NOT NULL;`);
+    await pool.query(`ALTER TABLE bookings ADD COLUMN ticket_code TEXT NOT NULL DEFAULT '';`);
+    await pool.query(`UPDATE bookings SET ticket_code = 'BS-' || id || '-' || replace(date,'-','') WHERE ticket_code IS NULL OR ticket_code = '';`);
+    try { await pool.query(`ALTER TABLE bookings ALTER COLUMN ticket_code SET NOT NULL;`); } catch (_) {}
   }
 
   // finance_moves
@@ -152,13 +158,6 @@ async function ensureSchema() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_finance_date ON finance_moves(date);`);
 }
-
-ensureSchema()
-  .then(() => console.log('DB schema ok'))
-  .catch((e) => {
-    console.error('DB schema fail:', e);
-    process.exit(1);
-  });
 
 // -------------------- Public API --------------------
 app.get('/api/health', async (req, res) => {
@@ -515,7 +514,17 @@ app.get('*', (req, res) => {
 });
 
 // -------------------- Start --------------------
-const PORT = Number(process.env.PORT || 3000);
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on ${PORT}`);
+
+async function main() {
+  await ensureSchema();
+  console.log("DB schema ok");
+  const PORT = parseInt(process.env.PORT || "3000", 10);
+  app.listen(PORT, () => {
+    console.log("Server running on", PORT);
+  });
+}
+
+main().catch((e) => {
+  console.error("Fatal startup error:", e);
+  process.exit(1);
 });
