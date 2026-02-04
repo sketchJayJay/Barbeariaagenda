@@ -90,7 +90,8 @@ async function initDb() {
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS service_key TEXT;`,
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS service_label TEXT;`,
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS duration_min INT;`,
-    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS price_cents INT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS price INT;
+    ALTER TABLE bookings ADD COLUMN IF NOT EXISTS price_cents INT;`,
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS date TEXT;`,
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS start_min INT;`,
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS end_min INT;`,
@@ -134,6 +135,14 @@ BEGIN
       SET price_cents = price * 100
     WHERE price_cents IS NULL AND price IS NOT NULL;
   END IF;
+
+  -- keep legacy column price filled (some installs have price NOT NULL)
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='price_cents') THEN
+    UPDATE bookings
+      SET price = COALESCE(price, ROUND(price_cents/100.0))
+    WHERE price IS NULL AND price_cents IS NOT NULL;
+  END IF;
+  UPDATE bookings SET price = 0 WHERE price IS NULL;
 
   -- duration stored as INT minutes (legacy)
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='duration') THEN
@@ -335,10 +344,10 @@ app.post("/api/bookings", async (req, res) => {
     }
 
     const ins = await client.query(
-      `INSERT INTO bookings (ticket, name, phone, service_key, service_label, duration_min, price_cents, date, start_min, end_min)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      `INSERT INTO bookings (ticket, name, phone, service_key, service_label, duration_min, price, price_cents, date, start_min, end_min)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING id, ticket, created_at`,
-      [ticket, name, phone, svc.key, svc.label, svc.duration_min, priceCents, date, startMin, endMin]
+      [ticket, name, phone, svc.key, svc.label, svc.duration_min, svc.price_reais, priceCents, date, startMin, endMin]
     );
 
     await client.query("COMMIT");
