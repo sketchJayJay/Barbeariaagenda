@@ -12,6 +12,8 @@ app.use(express.urlencoded({ extended: true }));
 const PORT = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+// Financeiro: se FINANCE_PASSWORD não for setado, usa o mesmo ADMIN_PASSWORD.
+const FINANCE_PASSWORD = process.env.FINANCE_PASSWORD || ADMIN_PASSWORD || "";
 const OWNER_WHATSAPP = (process.env.OWNER_WHATSAPP || "32998195165").replace(/\D/g, "");
 const TZ = process.env.TZ || "America/Sao_Paulo";
 
@@ -80,6 +82,26 @@ async function initDb() {
       date TEXT NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
+  `);
+
+  // Migração: versões antigas usavam tabela "finance" com coluna "description".
+  await p.query(`
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema='public' AND table_name='finance'
+  ) THEN
+    -- Copia os dados antigos para finance_entries (sem duplicar)
+    INSERT INTO finance_entries (kind, amount_cents, label, note, date, created_at)
+    SELECT f.kind, f.amount_cents, COALESCE(f.description, 'movimento'), NULL, f.date, COALESCE(f.created_at, NOW())
+    FROM finance f
+    WHERE NOT EXISTS (
+      SELECT 1 FROM finance_entries e
+      WHERE e.kind=f.kind AND e.amount_cents=f.amount_cents AND e.date=f.date AND e.label=COALESCE(f.description,'movimento')
+    );
+  END IF;
+END $$;
   `);
 
   // Columns migration (supports older schemas like start_time/start_ts etc.)
@@ -206,39 +228,72 @@ function parseCookies(cookieHeader) {
   return out;
 }
 
-function sign(payload) {
-  // payload: string
-  return crypto.createHmac("sha256", ADMIN_PASSWORD || "default").update(payload).digest("base64url");
+const TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function signWithSecret(secret, payloadB64) {
+  return crypto.createHmac("sha256", secret || "default")
+    .update(payloadB64)
+    .digest("base64url");
 }
 
-function makeAdminToken() {
+function makeToken(secret) {
   const payload = JSON.stringify({ t: Date.now() });
   const payloadB64 = Buffer.from(payload, "utf8").toString("base64url");
-  const sig = sign(payloadB64);
+  const sig = signWithSecret(secret, payloadB64);
   return `${payloadB64}.${sig}`;
 }
 
-function verifyAdminToken(token) {
-  if (!token || !ADMIN_PASSWORD) return false;
-  const parts = token.split(".");
+function verifyToken(token, secret) {
+  if (!token || !secret) return false;
+  const parts = String(token).split(".");
   if (parts.length !== 2) return false;
   const [payloadB64, sig] = parts;
-  const expected = sign(payloadB64);
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
-  // opcional: expiração 7 dias
+
+  const expected = signWithSecret(secret, payloadB64);
+  try {
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length) return false;
+    if (!crypto.timingSafeEqual(a, b)) return false;
+  } catch {
+    return false;
+  }
+
   try {
     const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
     if (!payload.t) return false;
     const age = Date.now() - payload.t;
-    return age < 7 * 24 * 60 * 60 * 1000;
+    return age < TOKEN_MAX_AGE_MS;
   } catch {
     return false;
   }
 }
 
+function makeAdminToken() {
+  return makeToken(ADMIN_PASSWORD);
+}
+
+function verifyAdminToken(token) {
+  return verifyToken(token, ADMIN_PASSWORD);
+}
+
+function makeFinanceToken() {
+  return makeToken(FINANCE_PASSWORD);
+}
+
+function verifyFinanceToken(token) {
+  return verifyToken(token, FINANCE_PASSWORD);
+}
+
 function adminAuth(req, res, next) {
   const cookies = parseCookies(req.headers.cookie || "");
   if (verifyAdminToken(cookies.admin_session)) return next();
+  return res.status(401).json({ ok: false, error: "unauthorized" });
+}
+
+function financeAuth(req, res, next) {
+  const cookies = parseCookies(req.headers.cookie || "");
+  if (verifyFinanceToken(cookies.finance_session)) return next();
   return res.status(401).json({ ok: false, error: "unauthorized" });
 }
 
@@ -323,7 +378,9 @@ app.post("/api/bookings", async (req, res) => {
   }
 
   const ticket = genTicket();
-  const priceCents = Math.round(Number(svc.price_reais) * 100);
+  let priceReais = Number(svc.price_reais);
+  if (!Number.isFinite(priceReais) || priceReais < 0) priceReais = 0;
+  const priceCents = Math.round(priceReais * 100);
 
   const p = getPool();
   const client = await p.connect();
@@ -347,7 +404,7 @@ app.post("/api/bookings", async (req, res) => {
       `INSERT INTO bookings (ticket, name, phone, service_key, service_label, duration_min, price, price_cents, date, start_min, end_min)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING id, ticket, created_at`,
-      [ticket, name, phone, svc.key, svc.label, svc.duration_min, svc.price_reais, priceCents, date, startMin, endMin]
+      [ticket, name, phone, svc.key, svc.label, svc.duration_min, priceReais, priceCents, date, startMin, endMin]
     );
 
     await client.query("COMMIT");
@@ -365,7 +422,7 @@ app.post("/api/bookings", async (req, res) => {
         end: toHHMM(endMin),
         service_label: svc.label,
         duration_min: svc.duration_min,
-        price_reais: svc.price_reais
+        price_reais: priceReais
       }
     });
   } catch (e) {
@@ -451,7 +508,39 @@ app.patch("/api/admin/bookings/:id", adminAuth, async (req, res) => {
   }
 });
 
-app.get("/api/admin/finance", adminAuth, async (req, res) => {
+// ---- Financeiro (somente barbeiro) ----
+app.get("/finance/login", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "finance-login.html"));
+});
+
+app.post("/finance/login", (req, res) => {
+  const pass = String(req.body.password || "");
+  if (!FINANCE_PASSWORD) {
+    return res.status(500).send("FALTOU FINANCE_PASSWORD (ou ADMIN_PASSWORD) no Coolify.");
+  }
+  if (pass !== FINANCE_PASSWORD) {
+    return res.status(401).sendFile(path.join(__dirname, "public", "finance-login.html"));
+  }
+  const token = makeFinanceToken();
+  res.setHeader("Set-Cookie", `finance_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 60 * 60}`);
+  res.redirect("/finance");
+});
+
+app.get("/finance/logout", (req, res) => {
+  res.setHeader("Set-Cookie", "finance_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
+  res.redirect("/finance/login");
+});
+
+app.get("/finance", (req, res) => {
+  const cookies = parseCookies(req.headers.cookie || "");
+  if (!verifyFinanceToken(cookies.finance_session)) {
+    return res.redirect("/finance/login");
+  }
+  res.sendFile(path.join(__dirname, "public", "finance.html"));
+});
+
+// ---- Finance API ----
+app.get("/api/finance", financeAuth, async (req, res) => {
   const start = String(req.query.start || "");
   const end = String(req.query.end || "");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
@@ -460,23 +549,26 @@ app.get("/api/admin/finance", adminAuth, async (req, res) => {
   try {
     const p = getPool();
     const { rows } = await p.query(
-      `SELECT id, kind, amount_cents, description, date, created_at
-       FROM finance
+      `SELECT id, kind, amount_cents, label, note, date, created_at
+       FROM finance_entries
        WHERE date >= $1 AND date <= $2
        ORDER BY date DESC, id DESC`,
       [start, end]
     );
-    res.json({ ok: true, items: rows.map(r => ({
-      ...r,
-      amount_reais: (Number(r.amount_cents) / 100).toFixed(2)
-    }))});
+    res.json({
+      ok: true,
+      items: rows.map(r => ({
+        ...r,
+        amount_reais: (Number(r.amount_cents) / 100).toFixed(2)
+      }))
+    });
   } catch (e) {
     console.error("finance list error:", e);
     res.status(500).json({ ok: false, error: "db_error" });
   }
 });
 
-app.get("/api/admin/finance/summary", adminAuth, async (req, res) => {
+app.get("/api/finance/summary", financeAuth, async (req, res) => {
   const start = String(req.query.start || "");
   const end = String(req.query.end || "");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
@@ -488,7 +580,7 @@ app.get("/api/admin/finance/summary", adminAuth, async (req, res) => {
       `SELECT
          COALESCE(SUM(CASE WHEN kind='in' THEN amount_cents ELSE 0 END),0) AS total_in,
          COALESCE(SUM(CASE WHEN kind='out' THEN amount_cents ELSE 0 END),0) AS total_out
-       FROM finance
+       FROM finance_entries
        WHERE date >= $1 AND date <= $2`,
       [start, end]
     );
@@ -498,7 +590,7 @@ app.get("/api/admin/finance/summary", adminAuth, async (req, res) => {
       ok: true,
       total_in_reais: (totalIn / 100).toFixed(2),
       total_out_reais: (totalOut / 100).toFixed(2),
-      net_reais: ((totalIn - totalOut) / 100).toFixed(2),
+      net_reais: ((totalIn - totalOut) / 100).toFixed(2)
     });
   } catch (e) {
     console.error("finance summary error:", e);
@@ -506,26 +598,41 @@ app.get("/api/admin/finance/summary", adminAuth, async (req, res) => {
   }
 });
 
-app.post("/api/admin/finance", adminAuth, async (req, res) => {
+app.post("/api/finance", financeAuth, async (req, res) => {
   const kind = String(req.body.kind || "");
   const amount = Number(req.body.amount_reais);
-  const description = String(req.body.description || "").trim();
+  const label = String(req.body.label || "").trim();
+  const note = String(req.body.note || "").trim();
   const date = String(req.body.date || "").trim();
 
   if (!["in", "out"].includes(kind)) return res.status(400).json({ ok: false, error: "kind inválido" });
   if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "valor inválido" });
+  if (!label) return res.status(400).json({ ok: false, error: "Informe a descrição" });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ ok: false, error: "date inválida" });
 
   try {
     const p = getPool();
     await p.query(
-      `INSERT INTO finance (kind, amount_cents, description, date)
-       VALUES ($1,$2,$3,$4)`,
-      [kind, Math.round(amount * 100), description, date]
+      `INSERT INTO finance_entries (kind, amount_cents, label, note, date)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [kind, Math.round(amount * 100), label, note || null, date]
     );
     res.json({ ok: true });
   } catch (e) {
     console.error("finance add error:", e);
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+app.delete("/api/finance/:id", financeAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "id inválido" });
+  try {
+    const p = getPool();
+    await p.query("DELETE FROM finance_entries WHERE id=$1", [id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("finance delete error:", e);
     res.status(500).json({ ok: false, error: "db_error" });
   }
 });

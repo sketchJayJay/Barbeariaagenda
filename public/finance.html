@@ -3,111 +3,102 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Financeiro | Barbearia Suprema</title>
+  <title>Financeiro • Barbearia Suprema</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <div class="bg"></div>
+
   <header class="top">
     <div class="brand">
-      <img class="brand-logo" src="/assets/logo.jpg" alt="Logo da Barbearia" onerror="this.style.display='none'">
-      <div class="brand-text">
-        <h1>Financeiro</h1>
-        <p>Entradas e saídas</p>
+      <img class="logo" src="/assets/logo.jpeg" alt="Barbearia Suprema" />
+      <div>
+        <div class="brand-title">Barbearia Suprema • Financeiro</div>
+        <div class="brand-sub">Entradas e saídas (acesso do barbeiro)</div>
       </div>
     </div>
 
-    <div class="top-actions">
-      <a class="btn ghost" href="/admin.html">Admin</a>
-      <a class="btn ghost" href="/">Voltar</a>
+    <div class="admin-actions">
+      <a class="ghost small" href="/">Agendamento</a>
+      <a class="ghost small" href="/admin">Admin</a>
+      <a class="ghost small" href="/finance/logout">Sair</a>
     </div>
   </header>
 
-  <main class="wrap one">
-    <section class="card" id="loginCard">
-      <h2>Acesso do dono</h2>
-      <div class="grid">
-        <label>
-          Período
-          <select id="finRange">
-            <option value="day">Dia</option>
-            <option value="week">Semana</option>
-            <option value="month">Mês</option>
-          </select>
-        </label>
-
-        <label>
-          Ação
-          <button class="btn ghost" id="btnFinRefresh" type="button">Atualizar</button>
-        </label>
-
-        <label id="finDateWrap">
-          Data (lançamento)
-          <input id="finDate" type="date" />
-        </label>
-
-        <label id="finMonthWrap" class="hidden">
-          Mês
-          <input id="finMonth" type="month" />
-        </label>
-      </div>
-
-      <p class="hint" id="periodLabel"></p>
-        <div class="kpi">
-          <div class="kpi-label">Saiu</div>
-          <div class="kpi-value" id="kpiOut">R$ 0,00</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Saldo</div>
-          <div class="kpi-value" id="kpiNet">R$ 0,00</div>
+  <main class="wrap single">
+    <section class="card">
+      <div class="row">
+        <h2>Resumo</h2>
+        <div class="row-right">
+          <button class="ghost small" id="btnWeek">Esta semana</button>
+          <button class="ghost small" id="btnMonth">Este mês</button>
         </div>
       </div>
 
-      <hr class="sep"/>
+      <div class="grid2">
+        <div class="field">
+          <label>Início</label>
+          <input id="finStart" type="date" />
+        </div>
+        <div class="field">
+          <label>Fim</label>
+          <input id="finEnd" type="date" />
+        </div>
+      </div>
 
-      <h3>Lançar movimento</h3>
-      <div class="grid">
-        <label>
-          Tipo
-          <select id="txType">
+      <div class="statgrid">
+        <div class="stat">
+          <div class="stat-big" id="sumIn">R$ 0,00</div>
+          <div class="stat-sub">Entradas</div>
+        </div>
+        <div class="stat">
+          <div class="stat-big" id="sumOut">R$ 0,00</div>
+          <div class="stat-sub">Saídas</div>
+        </div>
+        <div class="stat">
+          <div class="stat-big" id="sumNet">R$ 0,00</div>
+          <div class="stat-sub">Saldo</div>
+        </div>
+      </div>
+
+      <hr class="sep" />
+
+      <h3>Novo lançamento</h3>
+      <div class="grid2">
+        <div class="field">
+          <label>Tipo</label>
+          <select id="finKind">
             <option value="in">Entrada</option>
             <option value="out">Saída</option>
           </select>
-        </label>
-
-        <label>
-          Valor (R$)
-          <input id="txAmount" type="number" step="0.01" min="0" placeholder="0,00" />
-        </label>
-
-        <label>
-          Método
-          <select id="txMethod">
-            <option value="">(opcional)</option>
-            <option value="dinheiro">Dinheiro</option>
-            <option value="pix">Pix</option>
-            <option value="cartao">Cartão</option>
-            <option value="transferencia">Transferência</option>
-          </select>
-        </label>
-
-        <label>
-          Categoria
-          <input id="txCategory" placeholder="Ex: Corte, Produto, Aluguel..." />
-        </label>
-
-        <label class="full">
-          Descrição
-          <input id="txDesc" placeholder="Ex: Corte João / Compra de produto" />
-        </label>
+        </div>
+        <div class="field">
+          <label>Valor (R$)</label>
+          <input id="finAmount" type="number" step="0.01" min="0" placeholder="0.00" />
+        </div>
+        <div class="field">
+          <label>Data</label>
+          <input id="finDate" type="date" />
+        </div>
+        <div class="field">
+          <label>Descrição</label>
+          <input id="finLabel" placeholder="Ex: Corte, produto, aluguel..." />
+        </div>
       </div>
+      <div class="field">
+        <label>Observação (opcional)</label>
+        <input id="finNote" placeholder="Ex: caixa, fornecedor, etc." />
+      </div>
+      <button class="primary small" id="btnAddFin">Adicionar</button>
+      <div class="error" id="finError" style="display:none"></div>
 
-      <button class="btn" id="btnTxAdd">Salvar</button>
-      <p class="hint" id="txMsg"></p>
+      <hr class="sep" />
 
-      <hr class="sep"/>
-
-      <h3>Movimentos</h3>
-      <div class="table" id="txTable"></div>
+      <div class="row">
+        <h3>Movimentação</h3>
+        <button class="ghost small" id="btnReload">Atualizar</button>
+      </div>
+      <div id="finList" class="table"></div>
     </section>
   </main>
 

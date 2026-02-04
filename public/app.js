@@ -7,6 +7,8 @@ const state = {
   selectedDate: null
 };
 
+let slotTimer = null;
+
 function onlyDigits(v){ return String(v||"").replace(/\D/g,""); }
 
 function formatDateISO(d){
@@ -62,15 +64,19 @@ async function loadServices(){
   // Owner WhatsApp
   // tenta pegar do backend via /api/health (owner não vem) -> fica no padrão
   const ownerBtn = el("whatsOwner");
-  ownerBtn.href = waLink("55"+state.ownerWhatsapp, "Olá! Quero informações sobre outros serviços da Barbearia Suprema.");
+  ownerBtn.href = waLink(toWaNumber(state.ownerWhatsapp), "Olá! Quero informações sobre outros serviços da Barbearia Suprema.");
 }
 
-async function loadSlots(){
+async function loadSlots(silent = false){
   const date = el("date").value;
   const serviceKey = el("service").value;
   if(!date || !serviceKey) return;
 
-  el("slot").innerHTML = `<option value="">Carregando...</option>`;
+  const prevSlot = el("slot").value;
+
+  if (!silent) {
+    el("slot").innerHTML = `<option value="">Carregando...</option>`;
+  }
 
   const r = await fetch(`/api/slots?date=${encodeURIComponent(date)}&service=${encodeURIComponent(serviceKey)}`);
   const j = await r.json();
@@ -91,6 +97,20 @@ async function loadSlots(){
     opt.textContent = s.label;
     el("slot").appendChild(opt);
   });
+
+  // Mantém seleção (se ainda existir) quando atualiza automaticamente
+  if (prevSlot && j.slots.some(s => String(s.value) === String(prevSlot))) {
+    el("slot").value = prevSlot;
+  }
+}
+
+function startSlotAutoRefresh(){
+  if (slotTimer) clearInterval(slotTimer);
+  slotTimer = setInterval(async ()=>{
+    // se já confirmou, não precisa ficar atualizando
+    if (el("ticketBox").style.display === "block") return;
+    try { await loadSlots(true); } catch { /* silencioso */ }
+  }, 25000);
 }
 
 function updateServiceInfo(){
@@ -122,19 +142,28 @@ function showTicket(b){
   el("tService").textContent = `${b.service_label} (${b.duration_min} min)`;
   el("tPrice").textContent = `R$ ${b.price_reais}`;
 
-  const msg =
-`✅ Agendamento confirmado (Barbearia Suprema)
+  const msgBarber =
+`✅ Novo agendamento (Barbearia Suprema)
 Ticket: ${b.ticket}
 Cliente: ${b.name}
+WhatsApp do cliente: ${formatPhoneBR(b.phone)}
 Data: ${toBRDate(b.date)}
 Horário: ${b.start}
 Serviço: ${b.service_label}
 Valor: R$ ${b.price_reais}
 
-Guarde seu ticket.`;
+Para confirmar, responda este ticket ao cliente.`;
 
-  const wa = waLink(toWaNumber(b.phone), msg);
-  el("btnWhatsTicket").href = wa;
+  const msgMe =
+`✅ Meu agendamento confirmado (Barbearia Suprema)
+Ticket: ${b.ticket}
+Data: ${toBRDate(b.date)}
+Horário: ${b.start}
+Serviço: ${b.service_label}
+Valor: R$ ${b.price_reais}`;
+
+  el("btnWhatsBarber").href = waLink(toWaNumber(state.ownerWhatsapp), msgBarber);
+  el("btnWhatsMe").href = waLink(toWaNumber(b.phone), msgMe);
 
   el("ticketBox").style.display = "block";
 }
@@ -151,6 +180,7 @@ async function init(){
     await loadServices();
     updateServiceInfo();
     await loadSlots();
+    startSlotAutoRefresh();
 
     hideInitError();
   }catch(e){
