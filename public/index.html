@@ -39,7 +39,14 @@
       <h2>Novo agendamento</h2>
       <p class="muted">Vamos por etapas. Preencha e toque em <b>Próximo</b>. 🙂</p>
 
-      <form id="bookingForm" autocomplete="off">
+      <div class="progress-wrap" aria-label="Progresso do agendamento">
+    <div class="progress-track" role="progressbar" aria-valuemin="1" aria-valuemax="4" aria-valuenow="1">
+      <div id="progressFill" class="progress-fill"></div>
+    </div>
+    <div id="progressText" class="progress-text">Etapa 1 de 4</div>
+  </div>
+
+<form id="bookingForm" autocomplete="off">
   <div class="stepper" id="stepper">
     <button type="button" class="step-pill is-active" data-step="1"><span class="n">1</span> Seus dados</button>
     <button type="button" class="step-pill" data-step="2"><span class="n">2</span> Serviço</button>

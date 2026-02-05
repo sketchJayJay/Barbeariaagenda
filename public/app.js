@@ -13,16 +13,54 @@ function setActiveStep(n){
   });
 }
 
+
+function updateProgress(n){
+  const pct = Math.round((n/4)*100);
+  const fill = document.getElementById('progressFill');
+  const text = document.getElementById('progressText');
+  const track = document.querySelector('.progress-track');
+  if(fill) fill.style.width = `${(n/4)*100}%`;
+  if(text) text.textContent = `Etapa ${n} de 4`;
+  if(track) track.setAttribute('aria-valuenow', String(n));
+}
+
+// anima transição entre cards (estilo app)
+function animateStepChange(fromEl, toEl){
+  if(!toEl) return;
+  // garante visível
+  toEl.style.display = '';
+  // anima entrada
+  toEl.animate([
+    { opacity: 0, transform: 'translateX(14px)' },
+    { opacity: 1, transform: 'translateX(0px)' }
+  ], { duration: 220, easing: 'ease-out' });
+
+  if(fromEl && fromEl !== toEl){
+    const anim = fromEl.animate([
+      { opacity: 1, transform: 'translateX(0px)' },
+      { opacity: 0, transform: 'translateX(-14px)' }
+    ], { duration: 180, easing: 'ease-in' });
+    anim.onfinish = ()=>{ fromEl.style.display = 'none'; };
+  }
+}
+
 let currentStep = 1;
 let slotRefreshTimer = null;
 
 function showStep(n){
+  const fromEl = document.querySelector(`.step-card:not([style*="display: none"])`);
+  const toEl = document.getElementById(`step${n}`);
+
   currentStep = n;
-  // mostra apenas o card do passo atual
+
+  // garante que todos estão escondidos (menos o destino)
   document.querySelectorAll('.step-card').forEach(sec=>{
-    sec.style.display = (sec.id === `step${n}`) ? '' : 'none';
+    if(sec !== toEl) sec.style.display = 'none';
   });
+
   setActiveStep(n);
+  updateProgress(n);
+  animateStepChange(fromEl, toEl);
 
   // botões
   const btnBack = el('btnBack');
@@ -35,10 +73,8 @@ function showStep(n){
 
   // quando entra no passo 4, carrega horários (se tiver dados)
   if(n === 4){
-    // carrega slots e inicia refresh
     loadSlots().catch(()=>{});
     startSlotAutoRefresh();
-    // habilita confirmar se já tiver horário
     btnConfirm.disabled = !el('slot').value;
   } else {
     stopSlotAutoRefresh();
