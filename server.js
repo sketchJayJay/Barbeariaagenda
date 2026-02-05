@@ -85,6 +85,7 @@ async function initDb() {
   // Columns migration (supports older schemas like start_time/start_ts etc.)
   const alters = [
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ticket TEXT;`,
+    `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ticket_code TEXT;`,
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS name TEXT;`,
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS phone TEXT;`,
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS service_key TEXT;`,
@@ -114,7 +115,14 @@ BEGIN
     UPDATE bookings
       SET end_min = (split_part(end_time, ':', 1)::int * 60 + split_part(end_time, ':', 2)::int)
     WHERE end_min IS NULL AND end_time IS NOT NULL;
+  
+  -- Fill ticket_code for legacy rows
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='ticket_code') THEN
+    UPDATE bookings
+      SET ticket_code = COALESCE(ticket_code, ticket, ('BS-LEGACY-' || id::text))
+    WHERE ticket_code IS NULL;
   END IF;
+END IF;
 
   -- start_ts/end_ts stored as TIMESTAMP
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='bookings' AND column_name='start_ts') THEN
@@ -344,10 +352,10 @@ app.post("/api/bookings", async (req, res) => {
     }
 
     const ins = await client.query(
-      `INSERT INTO bookings (ticket, name, phone, service_key, service_label, duration_min, price, price_cents, date, start_min, end_min)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       RETURNING id, ticket, created_at`,
-      [ticket, name, phone, svc.key, svc.label, svc.duration_min, svc.price_reais, priceCents, date, startMin, endMin]
+      `INSERT INTO bookings (ticket_code, ticket, name, phone, service_key, service_label, duration_min, price, price_cents, date, start_min, end_min)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       RETURNING id, ticket, ticket_code, created_at`,
+      [ticket, ticket, name, phone, svc.key, svc.label, svc.duration_min, svc.price_reais, priceCents, date, startMin, endMin]
     );
 
     await client.query("COMMIT");
