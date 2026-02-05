@@ -514,8 +514,18 @@ input:focus, select:focus{
 }
 
 /* ===== Bottom bar fixed (mobile app feel) ===== */
+/* No mobile o botão é FIXO e não pode tampar os campos.
+   Então criamos espaço EXTRA dentro do formulário + scroll padding. */
+html{ scroll-padding-bottom: 150px; }
 body{
-  padding-bottom: 110px; /* espaço pro botão fixo */
+  padding-bottom: 120px; /* fallback */
+}
+
+@media (max-width: 819px){
+  /* espaço dentro do form para os inputs não ficarem atrás da barra */
+  #bookingForm{ padding-bottom: 160px; }
+  /* e um respiro extra dentro do card principal */
+  .card{ padding-bottom: 170px; }
 }
 .bottom-bar{
   position: fixed;
