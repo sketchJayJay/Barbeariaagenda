@@ -5,12 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Barbearia Suprema • Agendamentos</title>
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#ef4444" />
   <link rel="icon" href="/assets/logo.jpeg" />
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#0a0a12" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="apple-touch-icon" href="/assets/icon-192.png" />
 </head>
 <body>
   <div class="bg"></div>
@@ -33,64 +30,64 @@
   <main class="wrap">
     <section class="card">
       <h2>Novo agendamento</h2>
-      <p class="muted">Toque nos passos abaixo. O sistema mostra apenas horários livres.</p>
-
-      <div class="steps" aria-hidden="true">
-        <div class="stepchip"><span>1</span> Serviço</div>
-        <div class="stepchip"><span>2</span> Data</div>
-        <div class="stepchip"><span>3</span> Horário</div>
-        <div class="stepchip"><span>4</span> Confirmar</div>
-      </div>
+      <p class="muted">Escolha o serviço e o sistema vai mostrar apenas os horários disponíveis.</p>
 
       <form id="bookingForm" autocomplete="off">
-        <div class="stepcard" id="stepService">
-          <div class="stephead"><span class="dot">1</span> Serviço</div>
-          <div class="field">
-            <label for="service">Escolha o procedimento</label>
-            <select id="service" required></select>
-          </div>
-          <div class="mini" id="serviceInfo"></div>
-        </div>
+  <div class="stepper" id="stepper">
+    <button type="button" class="step-pill is-active" data-step="1"><span class="n">1</span> Serviço</button>
+    <button type="button" class="step-pill" data-step="2"><span class="n">2</span> Data</button>
+    <button type="button" class="step-pill" data-step="3"><span class="n">3</span> Horário</button>
+    <button type="button" class="step-pill" data-step="4"><span class="n">4</span> Seus dados</button>
+  </div>
 
-        <div class="stepcard" id="stepDate">
-          <div class="stephead"><span class="dot">2</span> Data</div>
-          <div class="field">
-            <label for="date">Escolha a data</label>
-            <input id="date" type="date" required />
-          </div>
-          <div class="mini">Dica: se não aparecer horário, é porque lotou naquele dia.</div>
-        </div>
+  <section class="step-card" id="step1">
+    <div class="step-title"><span class="badge">1</span> Escolha o procedimento</div>
+    <div class="field field-app">
+      <select id="service" required aria-label="Serviço"></select>
+      <div class="hint" id="serviceInfo"></div>
+    </div>
+  </section>
 
-        <div class="stepcard" id="stepTime">
-          <div class="stephead"><span class="dot">3</span> Horário disponível</div>
-          <div class="field">
-            <div id="slotGrid" class="slotgrid" aria-live="polite"></div>
-            <input id="slot" type="hidden" />
-            <div class="mini" id="slotHint"></div>
-          </div>
-        </div>
+  <section class="step-card" id="step2">
+    <div class="step-title"><span class="badge">2</span> Escolha a data</div>
+    <div class="field field-app">
+      <input id="date" type="date" required />
+      <div class="hint">Dica: se não aparecer horário, é porque lotou naquele dia.</div>
+    </div>
+  </section>
 
-        <div class="stepcard" id="stepClient">
-          <div class="stephead"><span class="dot">4</span> Seus dados</div>
-          <div class="grid2">
-            <div class="field">
-              <label>Nome</label>
-              <input id="name" placeholder="Seu nome" required minlength="2" autocomplete="name" />
-            </div>
+  <section class="step-card" id="step3">
+    <div class="step-title"><span class="badge">3</span> Escolha um horário disponível</div>
 
-            <div class="field">
-              <label>Telefone (WhatsApp)</label>
-              <input id="phone" placeholder="(xx) xxxxx-xxxx" required inputmode="numeric" autocomplete="tel" />
-            </div>
-          </div>
-        </div>
+    <!-- Mantém o select (compatibilidade), mas no mobile usamos botões -->
+    <select id="slot" required class="slot-select">
+      <option value="">Selecione...</option>
+    </select>
 
-        <div class="error" id="initError" style="display:none"></div>
+    <div id="slotGrid" class="slot-grid" aria-label="Horários disponíveis"></div>
+    <div class="hint">Toque em um horário para selecionar.</div>
+  </section>
 
-        <div class="actionbar" id="actionBar">
-          <button class="primary" id="btnConfirm" type="submit" disabled>Confirmar Agendamento</button>
-        </div>
-      </form>
+  <section class="step-card" id="step4">
+    <div class="step-title"><span class="badge">4</span> Seus dados</div>
+    <div class="grid2">
+      <div class="field field-app">
+        <label for="name">Nome</label>
+        <input id="name" placeholder="Seu nome" required minlength="2" />
+      </div>
+
+      <div class="field field-app">
+        <label for="phone">Telefone (WhatsApp)</label>
+        <input id="phone" placeholder="(xx) xxxxx-xxxx" required inputmode="tel" />
+      </div>
+    </div>
+  </section>
+
+  <div class="bottom-bar">
+    <button class="primary primary-big" id="btnConfirm" type="submit">Confirmar Agendamento</button>
+    <div class="error" id="initError" style="display:none"></div>
+  </div>
+</form>
 
       <div id="ticketBox" class="ticket" style="display:none">
         <div class="ticket-top">
@@ -112,8 +109,7 @@
 
         <div class="ticket-actions">
           <button class="ghost" id="btnCopy" type="button">Copiar ticket</button>
-          <a class="primary small" id="btnWhatsBarber" href="#" target="_blank" rel="noopener">Enviar ticket para a Barbearia (WhatsApp)</a>
-          <a class="ghost small" id="btnWhatsMe" href="#" target="_blank" rel="noopener">Enviar ticket para mim</a>
+          <a class="primary small" id="btnWhatsTicket" href="#" target="_blank" rel="noopener">Abrir WhatsApp com o ticket</a>
           <button class="ghost" id="btnNew" type="button">Novo agendamento</button>
         </div>
 
@@ -124,38 +120,30 @@
 </section>
 
     <aside class="card">
-      <details class="details" open>
-        <summary>Como funciona</summary>
-        <ul>
-          <li>Horário de funcionamento: <b>08:00 às 20:00</b></li>
-          <li>Os horários ocupados somem automaticamente.</li>
-          <li>Se não aparecer horário, é porque lotou naquele dia.</li>
-          <li>Precisa de outro serviço? Clique no WhatsApp acima.</li>
-        </ul>
+      <h2>Como funciona</h2>
+      <ul>
+        <li>Horário de funcionamento: <b>08:00 às 20:00</b></li>
+        <li>Os horários ocupados somem automaticamente.</li>
+        <li>Se não aparecer horário, é porque lotou naquele dia.</li>
+        <li>Precisa de outro serviço? Clique no WhatsApp acima.</li>
+      </ul>
 
-        <div class="statgrid">
-          <div class="stat">
-            <div class="stat-big">08:00</div>
-            <div class="stat-sub">Abertura</div>
-          </div>
-          <div class="stat">
-            <div class="stat-big">20:00</div>
-            <div class="stat-sub">Fechamento</div>
-          </div>
+      <div class="statgrid">
+        <div class="stat">
+          <div class="stat-big">08:00</div>
+          <div class="stat-sub">Abertura</div>
         </div>
+        <div class="stat">
+          <div class="stat-big">20:00</div>
+          <div class="stat-sub">Fechamento</div>
+        </div>
+      </div>
 
-        <div class="note">
-          <b>WhatsApp:</b> após confirmar, você verá o ticket e pode enviar a mensagem no WhatsApp em 1 clique.
-        </div>
-      </details>
+      <div class="note">
+        <b>WhatsApp:</b> após confirmar, você verá o ticket e pode enviar a mensagem no WhatsApp em 1 clique.
+      </div>
     </aside>
   </main>
-
-  <div class="footer-links">
-    <a href="/admin/login">Admin</a>
-    <span>•</span>
-    <a href="/finance/login">Financeiro</a>
-  </div>
 
   <script src="/app.js"></script>
 </body>

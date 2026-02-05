@@ -1,181 +1,226 @@
-const el = (id)=>document.getElementById(id);
+const $ = (id) => document.getElementById(id);
+let token = "";
 
-function formatDateISO(d){
-  const y=d.getFullYear();
-  const m=String(d.getMonth()+1).padStart(2,"0");
-  const day=String(d.getDate()).padStart(2,"0");
+function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
-function toBRDate(iso){
-  const [y,m,d] = String(iso||"").split("-");
-  if(!y) return "";
-  return `${d}/${m}/${y}`;
+function currentMonth() {
+  const t = todayISO();
+  return t.slice(0, 7);
 }
 
-function reais(v){
-  return "R$ " + String(v).replace(".", ",");
+function brl(n) {
+  const v = Number(n || 0);
+  try { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+  catch { return `R$ ${v.toFixed(2)}`; }
 }
 
-async function fetchJSON(url, opts){
-  const r = await fetch(url, { credentials:"include", ...opts });
-  const j = await r.json();
-  if(!j.ok) throw new Error(j.error || "erro");
-  return j;
+function msg(t) { $("finMsg").textContent = t; }
+function txMsg(t) { $("txMsg").textContent = t; }
+
+function getRange() {
+  return $("finRange") ? $("finRange").value : "day";
 }
 
-function showError(msg){
-  const box = el("finError");
-  box.style.display = msg ? "block" : "none";
-  box.textContent = msg || "";
+function periodQuery() {
+  const range = getRange();
+  const date = $("finDate") ? $("finDate").value : "";
+  const month = $("finMonth") ? $("finMonth").value : "";
+  const qs = new URLSearchParams();
+  qs.set("range", range);
+  if (date) qs.set("date", date);
+  if (month) qs.set("month", month);
+  return qs.toString();
 }
 
-function weekRange(today){
-  const d = new Date(today);
-  const day = d.getDay(); // 0=dom
-  const diffToMon = (day === 0 ? -6 : 1 - day);
-  const start = new Date(d);
-  start.setDate(d.getDate() + diffToMon);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return [start, end];
-}
+function updateRangeUI() {
+  const r = getRange();
+  const dateWrap = $("finDateWrap");
+  const monthWrap = $("finMonthWrap");
+  if (!dateWrap || !monthWrap) return;
 
-function monthRange(today){
-  const d = new Date(today);
-  const start = new Date(d.getFullYear(), d.getMonth(), 1);
-  const end = new Date(d.getFullYear(), d.getMonth()+1, 0);
-  return [start, end];
-}
-
-async function loadSummaryAndList(){
-  const start = el("finStart").value;
-  const end = el("finEnd").value;
-
-  const sum = await fetchJSON(`/api/finance/summary?start=${start}&end=${end}`);
-  el("sumIn").textContent = reais(sum.total_in_reais);
-  el("sumOut").textContent = reais(sum.total_out_reais);
-  el("sumNet").textContent = reais(sum.net_reais);
-
-  const list = await fetchJSON(`/api/finance?start=${start}&end=${end}`);
-  const rows = list.items;
-
-  const html = `
-  <table>
-    <thead>
-      <tr>
-        <th>Data</th>
-        <th>Tipo</th>
-        <th>Descrição</th>
-        <th>Obs.</th>
-        <th>Valor</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rows.map(it=>{
-        const pill = it.kind === "in" ? "ok" : "bad";
-        const label = it.kind === "in" ? "Entrada" : "Saída";
-        return `
-          <tr>
-            <td>${toBRDate(it.date)}</td>
-            <td><span class="pill ${pill}">${label}</span></td>
-            <td>${escapeHtml(it.label || "")}</td>
-            <td>${escapeHtml(it.note || "")}</td>
-            <td><b>${reais(it.amount_reais)}</b></td>
-            <td><button class="ghost small" data-del="${it.id}">Excluir</button></td>
-          </tr>
-        `;
-      }).join("")}
-    </tbody>
-  </table>`;
-
-  el("finList").innerHTML = html;
-  el("finList").querySelectorAll("button[data-del]").forEach(btn=>{
-    btn.addEventListener("click", ()=> delItem(btn.getAttribute("data-del")));
-  });
-}
-
-function escapeHtml(s){
-  return String(s||"")
-    .replace(/&/g,"&amp;")
-    .replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;")
-    .replace(/\"/g,"&quot;")
-    .replace(/'/g,"&#39;");
-}
-
-async function addItem(){
-  const kind = el("finKind").value;
-  const amount = Number(el("finAmount").value);
-  const date = el("finDate").value;
-  const label = el("finLabel").value.trim();
-  const note = el("finNote").value.trim();
-
-  if(!amount || amount <= 0) return showError("Informe um valor válido.");
-  if(!date) return showError("Informe a data.");
-  if(!label) return showError("Informe a descrição.");
-
-  showError("");
-  await fetchJSON("/api/finance", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ kind, amount_reais: amount, date, label, note })
-  });
-
-  el("finAmount").value = "";
-  el("finLabel").value = "";
-  el("finNote").value = "";
-  await loadSummaryAndList();
-}
-
-async function delItem(id){
-  if(!confirm("Excluir este lançamento?")) return;
-  try{
-    await fetchJSON(`/api/finance/${id}`, { method:"DELETE" });
-    await loadSummaryAndList();
-  }catch(e){
-    showError("Erro: " + e.message);
+  if (r === "month") {
+    monthWrap.classList.remove("hidden");
+  } else {
+    monthWrap.classList.add("hidden");
   }
 }
 
-async function init(){
-  const today = new Date();
-  const [ms, me] = monthRange(today);
-  el("finStart").value = formatDateISO(ms);
-  el("finEnd").value = formatDateISO(me);
-  el("finDate").value = formatDateISO(today);
-
-  el("btnWeek").addEventListener("click", ()=>{
-    const [s,e] = weekRange(new Date());
-    el("finStart").value = formatDateISO(s);
-    el("finEnd").value = formatDateISO(e);
-    loadSummaryAndList().catch(err=>{
-      showError("Erro (login expirou?): " + err.message);
-      location.href="/finance/login";
-    });
-  });
-  el("btnMonth").addEventListener("click", ()=>{
-    const [s,e] = monthRange(new Date());
-    el("finStart").value = formatDateISO(s);
-    el("finEnd").value = formatDateISO(e);
-    loadSummaryAndList().catch(err=>{
-      showError("Erro (login expirou?): " + err.message);
-      location.href="/finance/login";
-    });
-  });
-
-  el("finStart").addEventListener("change", ()=> loadSummaryAndList().catch(()=>{}));
-  el("finEnd").addEventListener("change", ()=> loadSummaryAndList().catch(()=>{}));
-  el("btnReload").addEventListener("click", ()=> loadSummaryAndList().catch(()=>{}));
-  el("btnAddFin").addEventListener("click", ()=> addItem().catch(e=>showError(e.message)));
-
-  try{
-    await loadSummaryAndList();
-  }catch(e){
-    showError("Erro (login expirou?): " + e.message);
-    location.href="/finance/login";
-  }
+function rangeLabel(data) {
+  if (!data || !data.range) return "";
+  if (data.range === "day") return `Dia: ${data.from}`;
+  if (data.range === "week") return `Semana: ${data.from} a ${data.to}`;
+  if (data.range === "month") return `Mês: ${String(data.from).slice(0, 7)} (${data.from} a ${data.to})`;
+  return `Período: ${data.from} a ${data.to}`;
 }
 
-init();
+async function login() {
+  const pass = $("finPass").value.trim();
+  if (!pass) return msg("Digite a senha.");
+  const res = await fetch("/api/finance/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: pass }),
+  });
+  const data = await res.json();
+  if (!res.ok) return msg(data.error || "Falha no login.");
+  token = data.token;
+
+  $("loginCard").classList.add("hidden");
+  $("finCard").classList.remove("hidden");
+  msg("");
+
+  await refreshAll();
+}
+
+async function refreshAll() {
+  await Promise.all([loadSummary(), loadTx()]);
+}
+
+async function loadSummary() {
+  const res = await fetch(`/api/finance/summary?${periodQuery()}`, {
+    headers: { "x-finance-token": token },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    txMsg(data.error || "Erro no resumo.");
+    return;
+  }
+
+  $("kpiIn").textContent = brl(data.total_in);
+  $("kpiOut").textContent = brl(data.total_out);
+  $("kpiNet").textContent = brl(data.net);
+
+  const pl = $("periodLabel");
+  if (pl) pl.textContent = rangeLabel(data);
+}
+
+function renderTxTable(rows, range) {
+  if (!rows.length) {
+    if (range === "day") return "<p class='hint'>Nenhum movimento neste dia.</p>";
+    if (range === "week") return "<p class='hint'>Nenhum movimento nesta semana.</p>";
+    return "<p class='hint'>Nenhum movimento neste mês.</p>";
+  }
+
+  const hasDateCol = range !== "day";
+
+  const head = `
+    <div class="row head">
+      ${hasDateCol ? "<div>Data</div>" : ""}
+      <div>Hora</div><div>Tipo</div><div>Valor</div><div>Método</div><div>Categoria</div><div>Descrição</div><div>Ações</div>
+    </div>
+  `;
+
+  const body = rows.map(r => {
+    const dt = new Date(r.created_at);
+    const hh = String(dt.getHours()).padStart(2, "0");
+    const mm = String(dt.getMinutes()).padStart(2, "0");
+    const typeLabel = r.type === "in" ? "Entrada" : "Saída";
+
+    return `
+      <div class="row">
+        ${hasDateCol ? `<div>${r.date}</div>` : ""}
+        <div>${hh}:${mm}</div>
+        <div>${typeLabel}</div>
+        <div>${brl(Number(r.amount))}</div>
+        <div>${r.method || ""}</div>
+        <div>${r.category || ""}</div>
+        <div>${r.description || ""}</div>
+        <div><button class="btn danger" data-del="${r.id}">Excluir</button></div>
+      </div>
+    `;
+  }).join("");
+
+  return head + body;
+}
+
+async function loadTx() {
+  const range = getRange();
+  const res = await fetch(`/api/finance/tx?${periodQuery()}`, {
+    headers: { "x-finance-token": token },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    txMsg(data.error || "Erro ao carregar movimentos.");
+    return;
+  }
+
+  const rows = Array.isArray(data) ? data : (data.rows || []);
+  $("txTable").innerHTML = renderTxTable(rows, range);
+  $("txTable").querySelectorAll("button[data-del]").forEach(btn => {
+    btn.addEventListener("click", () => delTx(btn.getAttribute("data-del")));
+  });
+}
+
+async function addTx() {
+  const range = getRange();
+  const date = (range === "month") ? ($("finDate").value || todayISO()) : $("finDate").value;
+
+  const payload = {
+    date,
+    type: $("txType").value,
+    amount: Number($("txAmount").value),
+    method: $("txMethod").value,
+    category: $("txCategory").value.trim(),
+    description: $("txDesc").value.trim(),
+  };
+
+  if (!payload.amount || payload.amount < 0) {
+    txMsg("Informe um valor válido.");
+    return;
+  }
+
+  txMsg("Salvando...");
+  const res = await fetch("/api/finance/tx", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-finance-token": token },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    txMsg(data.error || "Erro ao salvar.");
+    return;
+  }
+
+  $("txAmount").value = "";
+  $("txDesc").value = "";
+  txMsg("Salvo ✅");
+
+  await refreshAll();
+}
+
+async function delTx(id) {
+  const res = await fetch(`/api/finance/tx/${id}`, {
+    method: "DELETE",
+    headers: { "x-finance-token": token },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    txMsg(data.error || "Erro ao excluir.");
+    return;
+  }
+  txMsg("Excluído ✅");
+  await refreshAll();
+}
+
+// Defaults
+$("finRange").value = "day";
+$("finDate").value = todayISO();
+$("finMonth").value = currentMonth();
+updateRangeUI();
+
+$("btnFinLogin").addEventListener("click", login);
+$("btnFinRefresh").addEventListener("click", refreshAll);
+$("btnTxAdd").addEventListener("click", addTx);
+
+$("finRange").addEventListener("change", () => {
+  updateRangeUI();
+  refreshAll();
+});
+$("finDate").addEventListener("change", refreshAll);
+$("finMonth").addEventListener("change", refreshAll);

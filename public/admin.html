@@ -14,13 +14,12 @@
       <img class="logo" src="/assets/logo.jpeg" alt="Barbearia Suprema" />
       <div>
         <div class="brand-title">Barbearia Suprema • Admin</div>
-          <div class="brand-sub">Agendamentos</div>
+        <div class="brand-sub">Agendamentos e Financeiro</div>
       </div>
     </div>
 
     <div class="admin-actions">
       <a class="ghost small" href="/">Voltar</a>
-      <a class="ghost small" href="/finance">Financeiro (barbeiro)</a>
       <a class="ghost small" href="/admin/logout">Sair</a>
     </div>
   </header>
@@ -39,6 +38,72 @@
       <div class="muted2">Dica: clique em <b>Whats</b> para abrir a conversa com o cliente e a mensagem pronta.</div>
     </section>
 
+    <section class="card">
+      <div class="row">
+        <h2>Financeiro</h2>
+        <div class="row-right">
+          <button class="ghost small" id="btnWeek">Esta semana</button>
+          <button class="ghost small" id="btnMonth">Este mês</button>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label>Início</label>
+          <input id="finStart" type="date" />
+        </div>
+        <div class="field">
+          <label>Fim</label>
+          <input id="finEnd" type="date" />
+        </div>
+      </div>
+
+      <div class="statgrid">
+        <div class="stat">
+          <div class="stat-big" id="sumIn">R$ 0,00</div>
+          <div class="stat-sub">Entradas</div>
+        </div>
+        <div class="stat">
+          <div class="stat-big" id="sumOut">R$ 0,00</div>
+          <div class="stat-sub">Saídas</div>
+        </div>
+        <div class="stat">
+          <div class="stat-big" id="sumNet">R$ 0,00</div>
+          <div class="stat-sub">Saldo</div>
+        </div>
+      </div>
+
+      <hr class="sep"/>
+
+      <h3>Novo lançamento</h3>
+      <div class="grid2">
+        <div class="field">
+          <label>Tipo</label>
+          <select id="finKind">
+            <option value="in">Entrada</option>
+            <option value="out">Saída</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Valor (R$)</label>
+          <input id="finAmount" type="number" step="0.01" min="0" placeholder="0.00" />
+        </div>
+        <div class="field">
+          <label>Data</label>
+          <input id="finDate" type="date" />
+        </div>
+        <div class="field">
+          <label>Descrição</label>
+          <input id="finDesc" placeholder="Ex: produto, aluguel, etc." />
+        </div>
+      </div>
+      <button class="primary small" id="btnAddFin">Adicionar</button>
+
+      <hr class="sep"/>
+
+      <h3>Movimentação</h3>
+      <div id="finList" class="table"></div>
+    </section>
   </main>
 
   <script src="/admin.js"></script>
