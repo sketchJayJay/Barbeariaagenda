@@ -63,6 +63,15 @@ async function loadServices(){
 
   const sel = el("service");
   sel.innerHTML = "";
+
+  // Placeholder para ficar bem claro onde clicar no celular
+  const ph = document.createElement("option");
+  ph.value = "";
+  ph.textContent = "Selecione um procedimento";
+  ph.disabled = true;
+  ph.selected = true;
+  sel.appendChild(ph);
+
   j.services.forEach(s=>{
     const opt = document.createElement("option");
     opt.value = s.key;
@@ -158,7 +167,10 @@ function startSlotAutoRefresh(){
 
 function updateServiceInfo(){
   const opt = el("service").selectedOptions[0];
-  if(!opt) return;
+  if(!opt || !opt.value){
+    el("serviceInfo").textContent = "";
+    return;
+  }
   const duration = opt.dataset.duration;
   const price = opt.dataset.price;
   el("serviceInfo").textContent = `${duration} min • R$ ${price}`;

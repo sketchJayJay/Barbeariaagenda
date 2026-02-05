@@ -11,6 +11,12 @@
   --shadow: 0 18px 60px rgba(0,0,0,.55);
   --radius: 18px;
   --wa:#22c55e;
+
+  /* Melhor visibilidade (áreas clicáveis no celular) */
+  --field-bg: rgba(255,255,255,.16);
+  --field-bg-hover: rgba(255,255,255,.22);
+  --field-border: rgba(255,255,255,.24);
+  --field-border-strong: rgba(255,255,255,.36);
 }
 
 *{box-sizing:border-box}
@@ -133,8 +139,8 @@ body{
 }
 
 .stepcard{
-  border: 1px solid rgba(255,255,255,.06);
-  background: rgba(0,0,0,.18);
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
   border-radius: 18px;
   padding: 12px;
   margin: 10px 0;
@@ -165,8 +171,8 @@ body{
   gap: 10px;
 }
 .slotbtn{
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.10);
   color: var(--text);
   border-radius: 16px;
   padding: 12px 10px;
@@ -175,7 +181,7 @@ body{
   user-select:none;
   -webkit-tap-highlight-color: transparent;
 }
-.slotbtn:hover{background: rgba(255,255,255,.08)}
+.slotbtn:hover{background: rgba(255,255,255,.14)}
 .slotbtn:active{transform: scale(.99)}
 .slotbtn.active{
   border-color: rgba(239,68,68,.55);
@@ -227,22 +233,59 @@ h3{margin:0 0 10px; font-size:16px}
 
 .field label{
   display:block;
-  font-size:12px;
-  color: var(--muted);
+  font-size:13px;
+  color: rgba(255,255,255,.86);
   margin: 0 0 6px;
 }
 input, select{
   width:100%;
   padding: 12px 12px;
   border-radius: 14px;
-  border: 1px solid var(--border);
-  background: rgba(0,0,0,.25);
+  border: 1px solid var(--field-border);
+  background: var(--field-bg);
   color: var(--text);
   outline:none;
+  font-size: 16px; /* evita zoom no iPhone */
+  box-shadow: 0 10px 22px rgba(0,0,0,.22);
 }
+input:hover, select:hover{background: var(--field-bg-hover); border-color: var(--field-border-strong);}
 input:focus, select:focus{
   border-color: rgba(239,68,68,.55);
   box-shadow: 0 0 0 4px rgba(239,68,68,.12);
+}
+
+input::placeholder{color: rgba(255,255,255,.65);}
+
+/* Select com “setinha” visível */
+select{
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 44px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='white' fill-opacity='.78' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+select option{background: #0a0a12; color: #ffffff;}
+select:invalid{color: rgba(255,255,255,.78);} 
+
+/* deixa claro onde tocar */
+.field input, .field select{
+  border-color: rgba(255,255,255,.30);
+}
+
+/* Ícone do calendário mais claro (Chrome/Safari) */
+input[type="date"]{padding-right: 44px;}
+input[type="date"]::-webkit-calendar-picker-indicator{
+  filter: invert(1);
+  opacity: .9;
+}
+
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field{
+  color: #ffffff;
 }
 
 .primary{
