@@ -71,18 +71,35 @@ async function initDb() {
   `);
 
   await p.query(`
-    CREATE TABLE IF NOT EXISTS finance_entries (
+    CREATE TABLE IF NOT EXISTS finance (
       id SERIAL PRIMARY KEY,
       kind TEXT NOT NULL,
       amount_cents INT NOT NULL,
-      label TEXT NOT NULL,
+      description TEXT NOT NULL,
       note TEXT,
       date TEXT NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
 
-  // Columns migration (supports older schemas like start_time/start_ts etc.)
+  // Compat: se existir tabela antiga "finance_entries" e a nova estiver vazia,
+  // migra os dados (label -> description).
+  try {
+    const hasOld = await p.query(`SELECT to_regclass('public.finance_entries') AS t;`);
+    if (hasOld.rows?.[0]?.t) {
+      const cntNew = await p.query(`SELECT COUNT(*)::int AS c FROM finance;`);
+      if ((cntNew.rows?.[0]?.c || 0) === 0) {
+        await p.query(`
+          INSERT INTO finance (kind, amount_cents, description, note, date, created_at)
+          SELECT kind, amount_cents, label, note, date, created_at
+          FROM finance_entries
+        `);
+      }
+    }
+  } catch (_) {
+    // silencioso
+  }
+// Columns migration (supports older schemas like start_time/start_ts etc.)
   const alters = [
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ticket TEXT;`,
     `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ticket_code TEXT;`,
@@ -176,7 +193,7 @@ END $$;
   await p.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_bookings_ticket ON bookings(ticket);`);
 
   // Finance indexes
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_finance_date ON finance_entries(date);`);
+  await p.query(`CREATE INDEX IF NOT EXISTS idx_finance_date ON finance(date);`);
 }
 
 
