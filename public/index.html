@@ -30,46 +30,18 @@
   <main class="wrap">
     <section class="card">
       <h2>Novo agendamento</h2>
-      <p class="muted">Escolha o serviço e o sistema vai mostrar apenas os horários disponíveis.</p>
+      <p class="muted">Vamos por etapas. Preencha e toque em <b>Próximo</b>. 🙂</p>
 
       <form id="bookingForm" autocomplete="off">
   <div class="stepper" id="stepper">
-    <button type="button" class="step-pill is-active" data-step="1"><span class="n">1</span> Serviço</button>
-    <button type="button" class="step-pill" data-step="2"><span class="n">2</span> Data</button>
-    <button type="button" class="step-pill" data-step="3"><span class="n">3</span> Horário</button>
-    <button type="button" class="step-pill" data-step="4"><span class="n">4</span> Seus dados</button>
+    <button type="button" class="step-pill is-active" data-step="1"><span class="n">1</span> Seus dados</button>
+    <button type="button" class="step-pill" data-step="2"><span class="n">2</span> Serviço</button>
+    <button type="button" class="step-pill" data-step="3"><span class="n">3</span> Data</button>
+    <button type="button" class="step-pill" data-step="4"><span class="n">4</span> Horário</button>
   </div>
 
   <section class="step-card" id="step1">
-    <div class="step-title"><span class="badge">1</span> Escolha o procedimento</div>
-    <div class="field field-app">
-      <select id="service" required aria-label="Serviço"></select>
-      <div class="hint" id="serviceInfo"></div>
-    </div>
-  </section>
-
-  <section class="step-card" id="step2">
-    <div class="step-title"><span class="badge">2</span> Escolha a data</div>
-    <div class="field field-app">
-      <input id="date" type="date" required />
-      <div class="hint">Dica: se não aparecer horário, é porque lotou naquele dia.</div>
-    </div>
-  </section>
-
-  <section class="step-card" id="step3">
-    <div class="step-title"><span class="badge">3</span> Escolha um horário disponível</div>
-
-    <!-- Mantém o select (compatibilidade), mas no mobile usamos botões -->
-    <select id="slot" required class="slot-select">
-      <option value="">Selecione...</option>
-    </select>
-
-    <div id="slotGrid" class="slot-grid" aria-label="Horários disponíveis"></div>
-    <div class="hint">Toque em um horário para selecionar.</div>
-  </section>
-
-  <section class="step-card" id="step4">
-    <div class="step-title"><span class="badge">4</span> Seus dados</div>
+    <div class="step-title"><span class="badge">1</span> Seus dados</div>
     <div class="grid2">
       <div class="field field-app">
         <label for="name">Nome</label>
@@ -83,8 +55,38 @@
     </div>
   </section>
 
+  <section class="step-card" id="step2" style="display:none">
+    <div class="step-title"><span class="badge">2</span> Selecione o serviço</div>
+    <div class="field field-app">
+      <select id="service" required aria-label="Serviço"></select>
+      <div class="hint" id="serviceInfo"></div>
+    </div>
+  </section>
+
+  <section class="step-card" id="step3" style="display:none">
+    <div class="step-title"><span class="badge">3</span> Escolha a data</div>
+    <div class="field field-app">
+      <input id="date" type="date" required />
+      <div class="hint">Dica: se não aparecer horário, é porque lotou naquele dia.</div>
+    </div>
+  </section>
+
+  <section class="step-card" id="step4" style="display:none">
+    <div class="step-title"><span class="badge">4</span> Horários disponíveis</div>
+
+    <!-- Mantém o select (compatibilidade), mas no mobile usamos botões -->
+    <select id="slot" required class="slot-select">
+      <option value="">Selecione...</option>
+    </select>
+
+    <div id="slotGrid" class="slot-grid" aria-label="Horários disponíveis"></div>
+    <div class="hint">Toque em um horário para selecionar.</div>
+  </section>
+
   <div class="bottom-bar">
-    <button class="primary primary-big" id="btnConfirm" type="submit">Confirmar Agendamento</button>
+    <button class="ghost" id="btnBack" type="button">Voltar</button>
+    <button class="primary primary-big" id="btnNext" type="button">Próximo</button>
+    <button class="primary primary-big" id="btnConfirm" type="submit" style="display:none" disabled>Confirmar</button>
     <div class="error" id="initError" style="display:none"></div>
   </div>
 </form>

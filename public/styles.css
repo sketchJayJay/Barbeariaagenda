@@ -365,6 +365,10 @@ input:focus, select:focus{
   font-size: 16px;
   outline:none;
   box-shadow: 0 6px 16px rgba(0,0,0,.22);
+  -webkit-appearance: none;
+  appearance: none;
+  color-scheme: light;
+  -webkit-text-fill-color: #111;
 }
 .field-app input::placeholder{color:#666}
 .field-app input:focus, .field-app select:focus, select.slot-select:focus{
@@ -385,6 +389,9 @@ input:focus, select:focus{
   display:grid;
   grid-template-columns: repeat(2, minmax(0,1fr));
   gap:10px;
+  max-height: 52vh;
+  overflow: auto;
+  padding-right: 4px;
 }
 .slot-btn{
   width:100%;
@@ -395,14 +402,13 @@ input:focus, select:focus{
   color:#111;
   font-weight: 900;
   cursor:pointer;
+  display:flex;
+  flex-direction: column;
+  align-items:center;
+  justify-content:center;
 }
-.slot-btn small{
-  display:block;
-  font-weight:700;
-  opacity:.75;
-  margin-top:4px;
-  font-size:12px;
-}
+.slot-time{font-size:16px; letter-spacing:.3px;}
+.slot-sub{font-size:12px; opacity:.75; margin-top:4px; font-weight:700;}
 .slot-btn.is-selected{
   background: rgba(239,68,68,.95);
   color:#fff;
@@ -421,7 +427,14 @@ input:focus, select:focus{
   padding-top: 10px;
   background: linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.35));
   border-radius: 16px;
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px;
+  align-items: center;
 }
+
+#btnConfirm{grid-column: 1 / -1;}
+#initError{grid-column: 1 / -1;}
 .primary-big{
   width:100%;
   padding:16px 18px;

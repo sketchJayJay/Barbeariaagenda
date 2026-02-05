@@ -12,10 +12,50 @@ function setActiveStep(n){
     b.classList.toggle("is-active", Number(b.dataset.step)===n);
   });
 }
-function scrollToStep(n){
-  const target = document.getElementById("step"+n);
-  if(target) target.scrollIntoView({behavior:"smooth", block:"start"});
+
+let currentStep = 1;
+let slotRefreshTimer = null;
+
+function showStep(n){
+  currentStep = n;
+  // mostra apenas o card do passo atual
+  document.querySelectorAll('.step-card').forEach(sec=>{
+    sec.style.display = (sec.id === `step${n}`) ? '' : 'none';
+  });
   setActiveStep(n);
+
+  // botões
+  const btnBack = el('btnBack');
+  const btnNext = el('btnNext');
+  const btnConfirm = el('btnConfirm');
+
+  btnBack.disabled = (n === 1);
+  btnNext.style.display = (n < 4) ? '' : 'none';
+  btnConfirm.style.display = (n === 4) ? '' : 'none';
+
+  // quando entra no passo 4, carrega horários (se tiver dados)
+  if(n === 4){
+    // carrega slots e inicia refresh
+    loadSlots().catch(()=>{});
+    startSlotAutoRefresh();
+    // habilita confirmar se já tiver horário
+    btnConfirm.disabled = !el('slot').value;
+  } else {
+    stopSlotAutoRefresh();
+  }
+}
+
+function startSlotAutoRefresh(){
+  stopSlotAutoRefresh();
+  slotRefreshTimer = setInterval(()=>{
+    if(currentStep === 4) loadSlots().catch(()=>{});
+  }, 25000);
+}
+function stopSlotAutoRefresh(){
+  if(slotRefreshTimer){
+    clearInterval(slotRefreshTimer);
+    slotRefreshTimer = null;
+  }
 }
 function renderSlotButtons(slots){
   const grid = document.getElementById("slotGrid");
@@ -30,13 +70,14 @@ function renderSlotButtons(slots){
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "slot-btn" + (current===s.value ? " is-selected" : "");
-    btn.innerHTML = `${s.label}<small>Disponível</small>`;
+    btn.innerHTML = `<span class="slot-time">${s.label}</span><span class="slot-sub">Disponível</span>`;
     btn.addEventListener("click", ()=>{
       el("slot").value = s.value;
       // atualizar seleção visual
       grid.querySelectorAll(".slot-btn").forEach(x=>x.classList.remove("is-selected"));
       btn.classList.add("is-selected");
-      scrollToStep(4);
+      // habilita confirmar
+      el('btnConfirm').disabled = false;
     });
     grid.appendChild(btn);
   });
@@ -189,7 +230,7 @@ async function init(){
 
     await loadServices();
     updateServiceInfo();
-    await loadSlots();
+    // horários serão carregados apenas no passo 4 (para não poluir a tela)
 
     hideInitError();
   }catch(e){
@@ -197,15 +238,66 @@ async function init(){
     showInitError("Erro ao iniciar o site. Verifique o banco/variáveis no Coolify e faça Redeploy.");
   }
 
-  el("service").addEventListener("change", async ()=>{
+  function clearSlotSelection(){
+    el('slot').value = '';
+    const grid = el('slotGrid');
+    if(grid) grid.innerHTML = '';
+    el('btnConfirm').disabled = true;
+  }
+
+  el("service").addEventListener("change", ()=>{
     updateServiceInfo();
-    scrollToStep(2);
-    try{ await loadSlots(); }catch(e){ showInitError("Erro ao carregar horários. (DB)"); }
+    clearSlotSelection();
   });
 
-  el("date").addEventListener("change", async ()=>{
-    scrollToStep(3);
-    try{ await loadSlots(); hideInitError(); }catch(e){ showInitError("Erro ao carregar horários. (DB)"); }
+  el("date").addEventListener("change", ()=>{
+    clearSlotSelection();
+  });
+
+  // Wizard (Próximo/Voltar)
+  el('btnBack').addEventListener('click', ()=>{
+    if(currentStep > 1) showStep(currentStep - 1);
+  });
+
+  function validStep1(){
+    const name = el('name').value.trim();
+    const phone = onlyDigits(el('phone').value);
+    if(name.length < 2) return "Digite seu nome.";
+    if(!(phone.length === 10 || phone.length === 11)) return "Digite um WhatsApp válido.";
+    return "";
+  }
+  function validStep2(){
+    if(!el('service').value) return "Selecione um serviço.";
+    return "";
+  }
+  function validStep3(){
+    if(!el('date').value) return "Selecione uma data.";
+    return "";
+  }
+
+  el('btnNext').addEventListener('click', async ()=>{
+    hideInitError();
+    let err = "";
+    if(currentStep === 1) err = validStep1();
+    if(currentStep === 2) err = validStep2();
+    if(currentStep === 3) err = validStep3();
+
+    if(err){
+      showInitError(err);
+      return;
+    }
+
+    // entrando no passo 4: carrega slots
+    if(currentStep === 3){
+      try{
+        await loadSlots();
+      }catch(e){
+        showInitError("Erro ao carregar horários. (DB)");
+        return;
+      }
+    }
+
+    showStep(currentStep + 1);
   });
 
   el("bookingForm").addEventListener("submit", async (ev)=>{
@@ -269,11 +361,15 @@ async function init(){
     el("slot").value = "";
     el("name").focus();
   });
-  // Stepper (cara de app)
+  // Stepper: permite voltar para passos anteriores (não pula pra frente sem preencher)
   document.querySelectorAll(".step-pill").forEach(btn=>{
-    btn.addEventListener("click", ()=> scrollToStep(Number(btn.dataset.step)));
+    btn.addEventListener("click", ()=>{
+      const n = Number(btn.dataset.step);
+      if(n <= currentStep) showStep(n);
+    });
   });
-  setActiveStep(1);
+
+  showStep(1);
 
   // PWA (instalar como app)
   if('serviceWorker' in navigator){
