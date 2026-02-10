@@ -562,3 +562,14 @@ body{
     padding: 10px 0 0;
   }
 }
+
+/* Aviso quando o dia está lotado */
+.no-slots{
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 12px;
+  margin: 10px 0 14px;
+}
+.no-slots-title{ font-weight: 800; }
+.no-slots-sub{ opacity: .92; font-size: 0.95rem; margin-top: 4px; }

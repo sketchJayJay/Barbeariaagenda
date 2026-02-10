@@ -218,6 +218,22 @@ function genTicket() {
   return `BS-${rand}`;
 }
 
+// Regra de agendamento: só permite a partir de amanhã (timezone America/Sao_Paulo)
+function minAllowedBookingDateISO() {
+  // converte "agora" para o horário de São Paulo
+  const spNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  const y = spNow.getFullYear();
+  const m = String(spNow.getMonth() + 1).padStart(2, "0");
+  const d = String(spNow.getDate()).padStart(2, "0");
+  const todayISO = `${y}-${m}-${d}`;
+  // amanhã
+  const dt = new Date(y, spNow.getMonth(), spNow.getDate());
+  dt.setDate(dt.getDate() + 1);
+  const ym = String(dt.getMonth() + 1).padStart(2, "0");
+  const yd = String(dt.getDate()).padStart(2, "0");
+  return `${dt.getFullYear()}-${ym}-${yd}`;
+}
+
 function parseCookies(cookieHeader) {
   const out = {};
   if (!cookieHeader) return out;
@@ -301,6 +317,12 @@ app.get("/api/slots", async (req, res) => {
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return res.status(400).json({ ok: false, error: "date inválida (YYYY-MM-DD)" });
     }
+
+    // Só libera horários a partir de amanhã
+    const minDate = minAllowedBookingDateISO();
+    if (date < minDate) {
+      return res.json({ ok: true, slots: [] });
+    }
     if (!svc) return res.status(400).json({ ok: false, error: "service inválido" });
 
     const p = getPool();
@@ -339,6 +361,8 @@ app.post("/api/bookings", async (req, res) => {
   if (!name || name.length < 2) return res.status(400).json({ ok: false, error: "Nome inválido" });
   if (!phone || phone.replace(/\D/g, "").length < 10) return res.status(400).json({ ok: false, error: "Telefone inválido" });
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ ok: false, error: "Data inválida" });
+  const minDate = minAllowedBookingDateISO();
+  if (date < minDate) return res.status(400).json({ ok: false, error: "Só é possível agendar a partir de amanhã." });
   if (!svc) return res.status(400).json({ ok: false, error: "Serviço inválido" });
   if (!Number.isFinite(startMin)) return res.status(400).json({ ok: false, error: "Horário inválido" });
 

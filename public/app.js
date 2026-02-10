@@ -129,6 +129,19 @@ function formatDateISO(d){
   return `${y}-${m}-${day}`;
 }
 
+function addDaysISO(iso, days){
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(y, (m-1), d);
+  dt.setDate(dt.getDate() + days);
+  return formatDateISO(dt);
+}
+
+function tomorrowISO(){
+  const dt = new Date();
+  dt.setDate(dt.getDate() + 1);
+  return formatDateISO(dt);
+}
+
 function toBRDate(iso){
   const [y,m,d] = iso.split("-");
   return `${d}/${m}/${y}`;
@@ -183,6 +196,9 @@ async function loadSlots(){
   const serviceKey = el("service").value;
   if(!date || !serviceKey) return;
 
+  // Esconde o aviso de "sem horários" antes de recarregar
+  if (el('noSlotsBox')) el('noSlotsBox').style.display = 'none';
+
   el("slot").innerHTML = `<option value="">Carregando...</option>`;
 
   const r = await fetch(`/api/slots?date=${encodeURIComponent(date)}&service=${encodeURIComponent(serviceKey)}`);
@@ -195,6 +211,8 @@ async function loadSlots(){
   if(j.slots.length === 0){
     el("slot").innerHTML = `<option value="">Sem horários disponíveis</option>`;
     renderSlotButtons([]);
+    // Mostra um aviso e dá opção de ir pro próximo dia com horários
+    if (el('noSlotsBox')) el('noSlotsBox').style.display = 'block';
     return;
   }
 
@@ -261,8 +279,10 @@ function hideTicket(){
 
 async function init(){
   try{
-    const today = new Date();
-    el("date").value = formatDateISO(today);
+    // regra: só pode agendar a partir de amanhã (evita marcar no dia anterior sem querer)
+    const minDate = tomorrowISO();
+    el("date").min = minDate;
+    el("date").value = minDate;
 
     await loadServices();
     updateServiceInfo();
@@ -287,8 +307,36 @@ async function init(){
   });
 
   el("date").addEventListener("change", ()=>{
+    // garante regra de "a partir de amanhã"
+    const minDate = el("date").min || tomorrowISO();
+    if(el("date").value && el("date").value < minDate){
+      el("date").value = minDate;
+    }
     clearSlotSelection();
   });
+
+  // Se o dia estiver lotado, permite pular para o próximo dia com horários
+  const btnNextDay = el('btnNextDay');
+  if(btnNextDay){
+    btnNextDay.addEventListener('click', async ()=>{
+      const base = el('date').value || (el('date').min || tomorrowISO());
+      // procura até 30 dias à frente
+      for(let i=1;i<=30;i++){
+        const cand = addDaysISO(base, i);
+        try{
+          const r = await fetch(`/api/slots?date=${encodeURIComponent(cand)}&service=${encodeURIComponent(el('service').value)}`);
+          const j = await r.json();
+          if(j.ok && Array.isArray(j.slots) && j.slots.length>0){
+            el('date').value = cand;
+            clearSlotSelection();
+            await loadSlots();
+            return;
+          }
+        } catch {}
+      }
+      alert('Não encontramos horários nos próximos 30 dias. Tente outra data mais pra frente.');
+    });
+  }
 
   // Wizard (Próximo/Voltar)
   el('btnBack').addEventListener('click', ()=>{
@@ -308,6 +356,8 @@ async function init(){
   }
   function validStep3(){
     if(!el('date').value) return "Selecione uma data.";
+    const minDate = el('date').min || tomorrowISO();
+    if(el('date').value < minDate) return "Só é possível agendar a partir de amanhã.";
     return "";
   }
 

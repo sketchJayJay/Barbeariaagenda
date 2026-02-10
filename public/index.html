@@ -81,12 +81,18 @@
     <div class="step-title"><span class="badge">3</span> Escolha a data</div>
     <div class="field field-app">
       <input id="date" type="date" required />
-      <div class="hint">Dica: se não aparecer horário, é porque lotou naquele dia.</div>
+      <div class="hint">Só liberamos a agenda a partir de amanhã. Se não aparecer horário, é porque lotou naquele dia.</div>
     </div>
   </section>
 
   <section class="step-card" id="step4" style="display:none">
     <div class="step-title"><span class="badge">4</span> Horários disponíveis</div>
+
+    <div id="noSlotsBox" class="no-slots" style="display:none">
+      <div class="no-slots-title">Sem horários disponíveis nessa data.</div>
+      <div class="no-slots-sub">Escolha outra data ou toque no botão abaixo para ir para o próximo dia com horários.</div>
+      <button id="btnNextDay" type="button" class="ghost">Próximo dia disponível</button>
+    </div>
 
     <!-- Mantém o select (compatibilidade), mas no mobile usamos botões -->
     <select id="slot" required class="slot-select">
