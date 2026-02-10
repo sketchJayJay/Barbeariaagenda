@@ -15,9 +15,10 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const OWNER_WHATSAPP = (process.env.OWNER_WHATSAPP || "32998195165").replace(/\D/g, "");
 const TZ = process.env.TZ || "America/Sao_Paulo";
 
-// Horário de funcionamento: 08:00 - 20:00
+// Horário de funcionamento: 08:00 - 20:20
 const OPEN_MIN = 8 * 60;
-const CLOSE_MIN = 20 * 60;
+// horário final (20:20)
+const CLOSE_MIN = 20 * 60 + 20;
 const SLOT_STEP = 10; // minutos (passo de agenda)
 
 // Serviços
