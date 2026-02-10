@@ -390,6 +390,9 @@ async function init(){
     ev.preventDefault();
     hideInitError();
 
+    // evita dupla confirmação / estado confuso
+    if (state.__bookingConfirmed) return;
+
     const payload = {
       name: el("name").value.trim(),
       phone: el("phone").value.trim(),
@@ -405,6 +408,7 @@ async function init(){
 
     el("btnConfirm").disabled = true;
     el("btnConfirm").textContent = "Confirmando...";
+    let success = false;
     try{
       const r = await fetch("/api/bookings", {
         method:"POST",
@@ -417,15 +421,28 @@ async function init(){
         return;
       }
 
+      success = true;
+      state.__bookingConfirmed = true;
       showTicket(j.booking);
+
+      // Esconde a barra de navegação para não parecer que "ainda falta confirmar"
+      const bottom = document.querySelector('.bottom-bar');
+      if (bottom) bottom.style.display = 'none';
+      // trava o stepper (evita clicar e tentar confirmar de novo)
+      document.querySelectorAll('.step-pill').forEach(b=> b.disabled = true);
       // Atualiza slots após reservar
       await loadSlots();
     }catch(e){
       console.error(e);
       showInitError("Erro ao confirmar (DB).");
     }finally{
-      el("btnConfirm").disabled = false;
-      el("btnConfirm").textContent = "Confirmar Agendamento";
+      if(!success){
+        el("btnConfirm").disabled = false;
+        el("btnConfirm").textContent = "Confirmar";
+      } else {
+        el("btnConfirm").disabled = true;
+        el("btnConfirm").textContent = "Confirmado";
+      }
     }
   });
 
@@ -442,10 +459,16 @@ async function init(){
 
   el("btnNew").addEventListener("click", ()=>{
     hideTicket();
+    // reabilita navegação
+    const bottom = document.querySelector('.bottom-bar');
+    if (bottom) bottom.style.display = '';
+    document.querySelectorAll('.step-pill').forEach(b=> b.disabled = false);
+    state.__bookingConfirmed = false;
     el("name").value = "";
     el("phone").value = "";
     el("slot").value = "";
     el("name").focus();
+    showStep(1);
   });
   // Stepper: permite voltar para passos anteriores (não pula pra frente sem preencher)
   document.querySelectorAll(".step-pill").forEach(btn=>{

@@ -335,7 +335,9 @@ app.get("/api/slots", async (req, res) => {
     const busy = rows.map(r => ({ start: Number(r.start_min), end: Number(r.end_min) }));
     const slots = [];
 
-    for (let start = OPEN_MIN; start + svc.duration_min <= CLOSE_MIN; start += SLOT_STEP) {
+    // Regra: CLOSE_MIN é o último horário de INÍCIO permitido.
+    // Ex.: 20:20 pode ser escolhido mesmo que o serviço termine depois.
+    for (let start = OPEN_MIN; start <= CLOSE_MIN; start += SLOT_STEP) {
       const end = start + svc.duration_min;
       const conflict = busy.some(b => start < b.end && end > b.start);
       if (!conflict) {
@@ -368,7 +370,8 @@ app.post("/api/bookings", async (req, res) => {
   if (!Number.isFinite(startMin)) return res.status(400).json({ ok: false, error: "Horário inválido" });
 
   const endMin = startMin + svc.duration_min;
-  if (startMin < OPEN_MIN || endMin > CLOSE_MIN) {
+  // Regra: permite iniciar até CLOSE_MIN (20:20). O término pode passar.
+  if (startMin < OPEN_MIN || startMin > CLOSE_MIN) {
     return res.status(400).json({ ok: false, error: "Fora do horário de funcionamento" });
   }
 
