@@ -56,6 +56,13 @@
 
   <section class="step-card" id="step1">
     <div class="step-title"><span class="badge">1</span> Seus dados</div>
+
+    <div class="choice-row" role="group" aria-label="Tipo de agendamento">
+      <button type="button" id="modeQuick" class="choice-btn is-active">Agendar rápido</button>
+      <button type="button" id="modePromo" class="choice-btn">Cadastrar e participar de promoções</button>
+    </div>
+    <div class="hint">Se você cadastrar, a barbearia pode te avisar de promoções e te parabenizar no aniversário (se você permitir).</div>
+
     <div class="grid2">
       <div class="field field-app">
         <label for="name">Nome</label>
@@ -65,6 +72,24 @@
       <div class="field field-app">
         <label for="phone">Telefone (WhatsApp)</label>
         <input id="phone" placeholder="(xx) xxxxx-xxxx" required inputmode="tel" />
+      </div>
+    </div>
+
+    <div id="promoBox" class="promo-box" style="display:none">
+      <div class="grid2">
+        <div class="field field-app">
+          <label for="birth">Data de nascimento</label>
+          <input id="birth" type="date" />
+          <div class="hint">Usamos só para enviar parabéns e ofertas no seu aniversário.</div>
+        </div>
+
+        <div class="field field-app">
+          <label class="check">
+            <input id="promoOpt" type="checkbox" />
+            <span>Quero receber promoções e mensagens de aniversário no WhatsApp</span>
+          </label>
+          <div class="hint">Você pode sair disso quando quiser.</div>
+        </div>
       </div>
     </div>
   </section>
@@ -131,13 +156,11 @@
 
         <div class="ticket-actions">
           <button class="ghost" id="btnCopy" type="button">Copiar ticket</button>
-          <a class="primary small" id="btnWhatsTicket" href="#" target="_blank" rel="noopener">Abrir WhatsApp com o ticket</a>
+          <div class="auto-sent">✅ Ticket enviado automaticamente para a barbearia.</div>
           <button class="ghost" id="btnNew" type="button">Novo agendamento</button>
         </div>
 
-        <div class="muted2">
-          * O WhatsApp abre com a mensagem pronta. É só clicar em <b>Enviar</b>.
-        </div>
+        
       </div>
 </section>
 
@@ -162,7 +185,7 @@
       </div>
 
       <div class="note">
-        <b>WhatsApp:</b> após confirmar, você verá o ticket e pode enviar a mensagem no WhatsApp em 1 clique.
+        <b>WhatsApp:</b> ao confirmar, o sistema envia automaticamente o aviso do agendamento para a barbearia.
       </div>
     </aside>
   </main>

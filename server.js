@@ -13,6 +13,14 @@ const PORT = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const OWNER_WHATSAPP = (process.env.OWNER_WHATSAPP || "32998195165").replace(/\D/g, "");
+
+// WhatsApp Cloud API (envs no Coolify)
+const WA_TOKEN = process.env.WA_TOKEN || "";
+const WA_PHONE_NUMBER_ID = process.env.WA_PHONE_NUMBER_ID || "";
+const WA_TEMPLATE_NAME = process.env.WA_TEMPLATE_NAME || "booking_alert";
+const WA_TEMPLATE_LANG = process.env.WA_TEMPLATE_LANG || "pt_BR";
+// Número do dono/barbearia no formato E.164 (ex: 5532998195165). Se não setar, usa OWNER_WHATSAPP com 55.
+const OWNER_WHATSAPP_E164 = (process.env.OWNER_WHATSAPP_E164 || ("55" + OWNER_WHATSAPP)).replace(/\D/g, "");
 const TZ = process.env.TZ || "America/Sao_Paulo";
 
 // Horário de funcionamento: 08:00 - 20:20
@@ -68,6 +76,17 @@ async function initDb() {
       end_min INT,
       status TEXT DEFAULT 'active',
       created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS customers (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      phone_e164 TEXT NOT NULL UNIQUE,
+      birth_date TEXT,
+      marketing_opt_in BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
 
@@ -193,6 +212,9 @@ END $$;
   await p.query(`CREATE INDEX IF NOT EXISTS idx_bookings_date_start ON bookings(date, start_min);`);
   await p.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_bookings_ticket ON bookings(ticket);`);
 
+  // Customers indexes
+  await p.query(`CREATE INDEX IF NOT EXISTS idx_customers_birth ON customers(birth_date);`);
+
   // Finance indexes
   await p.query(`CREATE INDEX IF NOT EXISTS idx_finance_date ON finance(date);`);
 }
@@ -211,6 +233,56 @@ function cleanPhone(phone) {
   // já com 55?
   if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) return digits;
   return digits; // fallback
+}
+
+
+
+async function sendOwnerWhatsAppTemplate({ name, serviceLabel, date, startHHMM, ticket }) {
+  try {
+    if (!WA_TOKEN || !WA_PHONE_NUMBER_ID || !OWNER_WHATSAPP_E164) {
+      return;
+    }
+
+    const url = `https://graph.facebook.com/v19.0/${WA_PHONE_NUMBER_ID}/messages`;
+
+    const payload = {
+      messaging_product: "whatsapp",
+      to: OWNER_WHATSAPP_E164,
+      type: "template",
+      template: {
+        name: WA_TEMPLATE_NAME,
+        language: { code: WA_TEMPLATE_LANG },
+        components: [
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: String(name || "") },
+              { type: "text", text: String(serviceLabel || "") },
+              { type: "text", text: String(date || "") },
+              { type: "text", text: String(startHHMM || "") },
+              { type: "text", text: String(ticket || "") },
+            ],
+          },
+        ],
+      },
+    };
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${WA_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.log("[WA] erro ao enviar aviso:", data);
+    }
+  } catch (e) {
+    console.log("[WA] falha ao enviar aviso:", e?.message || e);
+  }
 }
 
 function genTicket() {
@@ -367,6 +439,11 @@ app.post("/api/bookings", async (req, res) => {
   const minDate = minAllowedBookingDateISO();
   if (date < minDate) return res.status(400).json({ ok: false, error: "Só é possível agendar a partir de amanhã." });
   if (!svc) return res.status(400).json({ ok: false, error: "Serviço inválido" });
+  if (marketingOptIn) {
+    if (!birthDate || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+      return res.status(400).json({ ok: false, error: "Data de nascimento inválida" });
+    }
+  }
   if (!Number.isFinite(startMin)) return res.status(400).json({ ok: false, error: "Horário inválido" });
 
   const endMin = startMin + svc.duration_min;
@@ -396,6 +473,20 @@ app.post("/api/bookings", async (req, res) => {
       return res.status(409).json({ ok: false, error: "Horário acabou de ser ocupado. Escolha outro." });
     }
 
+    // Se o cliente optou por promoções, salva/atualiza cadastro
+    if (marketingOptIn) {
+      const phoneE164 = cleanPhone(phone);
+      await client.query(
+        `INSERT INTO customers (name, phone_e164, birth_date, marketing_opt_in)
+         VALUES ($1,$2,$3,TRUE)
+         ON CONFLICT (phone_e164) DO UPDATE
+         SET name=EXCLUDED.name,
+             birth_date=COALESCE(EXCLUDED.birth_date, customers.birth_date),
+             marketing_opt_in=TRUE`,
+        [name, phoneE164, birthDate]
+      );
+    }
+
     const ins = await client.query(
       `INSERT INTO bookings (ticket_code, ticket, name, phone, service_key, service_label, duration_min, price, price_cents, date, start_min, end_min)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
@@ -404,6 +495,15 @@ app.post("/api/bookings", async (req, res) => {
     );
 
     await client.query("COMMIT");
+
+    // Aviso automático para o dono (WhatsApp Cloud API)
+    sendOwnerWhatsAppTemplate({
+      name,
+      serviceLabel: svc.label,
+      date,
+      startHHMM: toHHMM(startMin),
+      ticket
+    });
 
     res.json({
       ok: true,
@@ -579,6 +679,24 @@ app.post("/api/admin/finance", adminAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error("finance add error:", e);
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+
+
+app.get("/api/admin/customers", adminAuth, async (req, res) => {
+  try {
+    const p = getPool();
+    const { rows } = await p.query(
+      `SELECT id, name, phone_e164, birth_date, marketing_opt_in, created_at
+       FROM customers
+       WHERE marketing_opt_in = TRUE
+       ORDER BY created_at DESC, id DESC`
+    );
+    res.json({ ok: true, customers: rows });
+  } catch (e) {
+    console.error("admin customers error:", e);
     res.status(500).json({ ok: false, error: "db_error" });
   }
 });

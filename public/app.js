@@ -4,7 +4,8 @@ const state = {
   services: [],
   ownerWhatsapp: "32998195165",
   selectedService: null,
-  selectedDate: null
+  selectedDate: null,
+  mode: "quick"
 };
 
 function setActiveStep(n){
@@ -267,9 +268,9 @@ Valor: R$ ${b.price_reais}
 
 Guarde seu ticket.`;
 
-  const wa = waLink(toWaNumber(b.phone), msg);
-  el("btnWhatsTicket").href = wa;
-
+  // WhatsApp: aviso é enviado automaticamente para a barbearia (via servidor)
+  const btn = el('btnWhatsTicket');
+  if(btn) btn.style.display = 'none';
   el("ticketBox").style.display = "block";
 }
 
@@ -300,6 +301,20 @@ async function init(){
     if(grid) grid.innerHTML = '';
     el('btnConfirm').disabled = true;
   }
+
+  // Modo: agendar rápido ou cadastrar para promoções
+  const promoBox = el('promoBox');
+  const modeQuick = el('modeQuick');
+  const modePromo = el('modePromo');
+  function setMode(mode){
+    state.mode = mode;
+    if(modeQuick) modeQuick.classList.toggle('is-active', mode==='quick');
+    if(modePromo) modePromo.classList.toggle('is-active', mode==='promo');
+    if(promoBox) promoBox.style.display = (mode==='promo') ? '' : 'none';
+  }
+  if(modeQuick) modeQuick.addEventListener('click', ()=> setMode('quick'));
+  if(modePromo) modePromo.addEventListener('click', ()=> setMode('promo'));
+  setMode('quick');
 
   el("service").addEventListener("change", ()=>{
     updateServiceInfo();
@@ -346,9 +361,15 @@ async function init(){
   function validStep1(){
     const name = el('name').value.trim();
     const phone = onlyDigits(el('phone').value);
-    if(name.length < 2) return "Digite seu nome.";
-    if(!(phone.length === 10 || phone.length === 11)) return "Digite um WhatsApp válido.";
-    return "";
+    if(name.length < 2) return 'Digite seu nome.';
+    if(!(phone.length === 10 || phone.length === 11)) return 'Digite um WhatsApp válido.';
+    if(state.mode === 'promo'){
+      const opt = el('promoOpt')?.checked;
+      const birth = el('birth')?.value || '';
+      if(!opt) return 'Marque a opção para receber promoções/aniversário.';
+      if(!birth) return 'Informe sua data de nascimento.';
+    }
+    return '';
   }
   function validStep2(){
     if(!el('service').value) return "Selecione um serviço.";
@@ -398,7 +419,9 @@ async function init(){
       phone: el("phone").value.trim(),
       date: el("date").value,
       service_key: el("service").value,
-      start_min: Number(el("slot").value)
+      start_min: Number(el("slot").value),
+      marketing_opt_in: (state.mode === 'promo') ? Boolean(el('promoOpt')?.checked) : false,
+      birth_date: (state.mode === 'promo') ? String(el('birth')?.value || '') : ''
     };
 
     if(!payload.start_min){
@@ -466,6 +489,12 @@ async function init(){
     state.__bookingConfirmed = false;
     el("name").value = "";
     el("phone").value = "";
+    if(el('birth')) el('birth').value = '';
+    if(el('promoOpt')) el('promoOpt').checked = false;
+    if(el('promoBox')) el('promoBox').style.display = 'none';
+    state.mode = 'quick';
+    if(el('modeQuick')) el('modeQuick').classList.add('is-active');
+    if(el('modePromo')) el('modePromo').classList.remove('is-active');
     el("slot").value = "";
     el("name").focus();
     showStep(1);

@@ -1,3 +1,7 @@
+function escapeHtml(s){
+  return String(s ?? "").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",""":"&quot;","'":"&#39;"}[c]));
+}
+
 const el = (id)=>document.getElementById(id);
 function onlyDigits(v){ return String(v||"").replace(/\D/g,""); }
 function toWaNumber(raw){
@@ -218,3 +222,63 @@ async function init(){
 }
 
 init();
+
+
+async function loadCustomers(){
+  try{
+    const r = await fetch('/api/admin/customers');
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error||'erro');
+    const el = document.getElementById('custList');
+    if(!el) return;
+    if(!j.customers || j.customers.length===0){
+      el.innerHTML = '<div class="muted">Nenhum cliente cadastrado ainda.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="trow thead">
+        <div>Nome</div>
+        <div>WhatsApp</div>
+        <div>Nascimento</div>
+      </div>
+      ${j.customers.map(c=>`
+        <div class="trow">
+          <div><b>${escapeHtml(c.name)}</b></div>
+          <div>${escapeHtml(c.phone_e164)}</div>
+          <div>${escapeHtml(c.birth_date||'')}</div>
+        </div>`).join('')}
+    `;
+  }catch(e){
+    console.log('customers error', e);
+  }
+}
+
+function copyCustomers(){
+  // copia em formato simples: Nome - WhatsApp
+  const rows = Array.from(document.querySelectorAll('#custList .trow')).slice(1);
+  const lines = rows.map(r=>{
+    const cols = r.querySelectorAll('div');
+    if(cols.length<2) return '';
+    return `${cols[0].innerText.replace(/\s+/g,' ').trim()}	${cols[1].innerText.replace(/\s+/g,'').trim()}`;
+  }).filter(Boolean);
+  const txt = lines.join('
+');
+  navigator.clipboard.writeText(txt).then(()=>{
+    const btn = document.getElementById('btnCopyCustomers');
+    if(btn){
+      const old = btn.textContent;
+      btn.textContent = 'Copiado!';
+      setTimeout(()=>btn.textContent=old, 1200);
+    }
+  }).catch(()=> alert('Não foi possível copiar automaticamente.'));
+}
+
+// hooks
+document.addEventListener('DOMContentLoaded', ()=>{
+  const b1 = document.getElementById('btnReloadCustomers');
+  const b2 = document.getElementById('btnCopyCustomers');
+  if(b1) b1.addEventListener('click', loadCustomers);
+  if(b2) b2.addEventListener('click', copyCustomers);
+  // carrega 1x
+  loadCustomers();
+});
