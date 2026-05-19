@@ -477,7 +477,7 @@ app.post("/api/bookings", async (req, res) => {
   if (date < minAllowedBookingDateISO()) return res.status(400).json({ ok: false, error: "Só é possível agendar a partir de amanhã." });
   if (!svc) return res.status(400).json({ ok: false, error: "Serviço inválido" });
   if (!Number.isFinite(startMin)) return res.status(400).json({ ok: false, error: "Horário inválido" });
-  if (marketingOptIn && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return res.status(400).json({ ok: false, error: "Data de nascimento inválida" });
+  if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return res.status(400).json({ ok: false, error: "Data de nascimento inválida" });
 
   const endMin = startMin + svc.duration_min;
   if (startMin < OPEN_MIN || startMin > CLOSE_MIN) return res.status(400).json({ ok: false, error: "Fora do horário de funcionamento" });
@@ -510,7 +510,7 @@ app.post("/api/bookings", async (req, res) => {
          SET name=EXCLUDED.name,
              birth_date=COALESCE(EXCLUDED.birth_date, customers.birth_date),
              marketing_opt_in=TRUE`,
-        [name, phoneE164, birthDate]
+        [name, phoneE164, birthDate || null]
       );
     }
 

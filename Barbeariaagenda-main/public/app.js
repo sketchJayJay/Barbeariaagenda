@@ -304,19 +304,9 @@ async function init(){
     el('btnConfirm').disabled = true;
   }
 
-  // Modo: agendar rápido ou cadastrar para promoções
+  // Promoções: opção sempre disponível no cadastro do agendamento
   const promoBox = el('promoBox');
-  const modeQuick = el('modeQuick');
-  const modePromo = el('modePromo');
-  function setMode(mode){
-    state.mode = mode;
-    if(modeQuick) modeQuick.classList.toggle('is-active', mode==='quick');
-    if(modePromo) modePromo.classList.toggle('is-active', mode==='promo');
-    if(promoBox) promoBox.style.display = (mode==='promo') ? '' : 'none';
-  }
-  if(modeQuick) modeQuick.addEventListener('click', ()=> setMode('quick'));
-  if(modePromo) modePromo.addEventListener('click', ()=> setMode('promo'));
-  setMode('quick');
+  if(promoBox) promoBox.style.display = '';
 
   el("service").addEventListener("change", ()=>{
     updateServiceInfo();
@@ -365,12 +355,6 @@ async function init(){
     const phone = onlyDigits(el('phone').value);
     if(name.length < 2) return 'Digite seu nome.';
     if(!(phone.length === 10 || phone.length === 11)) return 'Digite um WhatsApp válido.';
-    if(state.mode === 'promo'){
-      const opt = el('promoOpt')?.checked;
-      const birth = el('birth')?.value || '';
-      if(!opt) return 'Marque a opção para receber promoções/aniversário.';
-      if(!birth) return 'Informe sua data de nascimento.';
-    }
     return '';
   }
   function validStep2(){
@@ -422,8 +406,8 @@ async function init(){
       date: el("date").value,
       service_key: el("service").value,
       start_min: Number(el("slot").value),
-      marketing_opt_in: (state.mode === 'promo') ? Boolean(el('promoOpt')?.checked) : false,
-      birth_date: (state.mode === 'promo') ? String(el('birth')?.value || '') : ''
+      marketing_opt_in: Boolean(el('promoOpt')?.checked),
+      birth_date: String(el('birth')?.value || '')
     };
 
     if(!payload.start_min){
@@ -493,10 +477,7 @@ async function init(){
     el("phone").value = "";
     if(el('birth')) el('birth').value = '';
     if(el('promoOpt')) el('promoOpt').checked = false;
-    if(el('promoBox')) el('promoBox').style.display = 'none';
-    state.mode = 'quick';
-    if(el('modeQuick')) el('modeQuick').classList.add('is-active');
-    if(el('modePromo')) el('modePromo').classList.remove('is-active');
+    if(el('promoBox')) el('promoBox').style.display = '';
     el("slot").value = "";
     el("name").focus();
     showStep(1);

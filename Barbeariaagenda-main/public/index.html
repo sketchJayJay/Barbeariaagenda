@@ -57,11 +57,7 @@
   <section class="step-card" id="step1">
     <div class="step-title"><span class="badge">1</span> Seus dados</div>
 
-    <div class="choice-row" role="group" aria-label="Tipo de agendamento">
-      <button type="button" id="modeQuick" class="choice-btn is-active">Agendar rápido</button>
-      <button type="button" id="modePromo" class="choice-btn">Cadastrar e participar de promoções</button>
-    </div>
-    <div class="hint">Se você cadastrar, a barbearia pode te avisar de promoções e te parabenizar no aniversário (se você permitir).</div>
+    <div class="hint">Além do agendamento, o cliente pode autorizar o recebimento de promoções pelo WhatsApp.</div>
 
     <div class="grid2">
       <div class="field field-app">
@@ -75,21 +71,17 @@
       </div>
     </div>
 
-    <div id="promoBox" class="promo-box" style="display:none">
-      <div class="grid2">
-        <div class="field field-app">
-          <label for="birth">Data de nascimento</label>
-          <input id="birth" type="date" />
-          <div class="hint">Usamos só para enviar parabéns e ofertas no seu aniversário.</div>
-        </div>
+    <div id="promoBox" class="promo-box">
+      <label class="check promo-check">
+        <input id="promoOpt" type="checkbox" />
+        <span>Quero receber promoções pelo WhatsApp</span>
+      </label>
+      <div class="hint">Opcional. O cliente pode sair da lista quando quiser.</div>
 
-        <div class="field field-app">
-          <label class="check">
-            <input id="promoOpt" type="checkbox" />
-            <span>Quero receber promoções e mensagens de aniversário no WhatsApp</span>
-          </label>
-          <div class="hint">Você pode sair disso quando quiser.</div>
-        </div>
+      <div class="field field-app promo-birth">
+        <label for="birth">Data de nascimento <small>(opcional)</small></label>
+        <input id="birth" type="date" />
+        <div class="hint">Use para mensagem de aniversário, se o cliente quiser informar.</div>
       </div>
     </div>
   </section>
