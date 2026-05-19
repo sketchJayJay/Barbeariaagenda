@@ -57,7 +57,12 @@
   <section class="step-card" id="step1">
     <div class="step-title"><span class="badge">1</span> Seus dados</div>
 
-    <div class="hint">Além do agendamento, o cliente pode autorizar o recebimento de promoções pelo WhatsApp.</div>
+    <div class="hint">Escolha se o cliente quer agendar só com o nome ou deixar WhatsApp para contato e promoções.</div>
+
+    <div class="choice-row mode-row" aria-label="Tipo de agendamento">
+      <button type="button" id="modeQuick" class="choice-btn is-active">Agendar com WhatsApp</button>
+      <button type="button" id="modeNameOnly" class="choice-btn">Sem cadastro, só nome</button>
+    </div>
 
     <div class="grid2">
       <div class="field field-app">
@@ -65,9 +70,9 @@
         <input id="name" placeholder="Seu nome" required minlength="2" />
       </div>
 
-      <div class="field field-app">
-        <label for="phone">Telefone (WhatsApp)</label>
-        <input id="phone" placeholder="(xx) xxxxx-xxxx" required inputmode="tel" />
+      <div class="field field-app" id="phoneField">
+        <label for="phone">Telefone (WhatsApp) <small id="phoneOptional"></small></label>
+        <input id="phone" placeholder="(xx) xxxxx-xxxx" inputmode="tel" />
       </div>
     </div>
 
@@ -177,7 +182,7 @@
       </div>
 
       <div class="note">
-        <b>WhatsApp:</b> ao confirmar, o sistema envia automaticamente o aviso do agendamento para a barbearia.
+        <b>WhatsApp:</b> com webhook configurado, o sistema envia o aviso para a automação; sem webhook, abre o WhatsApp com a mensagem pronta.
       </div>
     </aside>
   </main>

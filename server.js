@@ -13,7 +13,11 @@ const PORT = Number(process.env.PORT || 3000);
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const FINANCE_PASSWORD = process.env.FINANCE_PASSWORD || ADMIN_PASSWORD || "";
-const OWNER_WHATSAPP = (process.env.OWNER_WHATSAPP || "32998195165").replace(/\D/g, "");
+const OWNER_WHATSAPP = (process.env.OWNER_WHATSAPP || "3298195165").replace(/\D/g, "");
+// Webhook opcional para Make/n8n/Zapier. Quando configurado, o sistema dispara
+// os dados do agendamento confirmado para a automação enviar o WhatsApp.
+const WHATSAPP_WEBHOOK_URL = String(process.env.WHATSAPP_WEBHOOK_URL || "").trim();
+const WHATSAPP_WEBHOOK_SECRET = String(process.env.WHATSAPP_WEBHOOK_SECRET || "").trim();
 const TZ = process.env.TZ || "America/Sao_Paulo";
 
 // Horário de funcionamento e passo da agenda
@@ -90,6 +94,32 @@ function formatISODateLocal(dt) {
   const m = String(dt.getMonth() + 1).padStart(2, "0");
   const d = String(dt.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function toBRDate(iso) {
+  const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return String(iso || "");
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+function formatPhoneBR(raw) {
+  const dig = String(raw || "").replace(/\D/g, "");
+  if (dig.length === 11) return `(${dig.slice(0,2)}) ${dig.slice(2,7)}-${dig.slice(7)}`;
+  if (dig.length === 10) return `(${dig.slice(0,2)}) ${dig.slice(2,6)}-${dig.slice(6)}`;
+  if (dig.startsWith("55")) return formatPhoneBR(dig.slice(2));
+  return raw ? String(raw) : "Não informado";
+}
+
+function buildOwnerMessageServer(b) {
+  const phoneText = b.phone ? formatPhoneBR(b.phone) : "Não informado";
+  return `✅ Novo agendamento confirmado - Barbearia Suprema
+Ticket: ${b.ticket}
+Cliente: ${b.name}
+Telefone: ${phoneText}
+Data: ${toBRDate(b.date)}
+Horário: ${b.start} às ${b.end}
+Serviço: ${b.service_label}
+Valor: R$ ${b.price_reais}`;
 }
 
 // Regra: só permite agendamento a partir de amanhã
@@ -349,6 +379,66 @@ async function sendOwnerWhatsAppTemplate({ name, serviceLabel, date, startHHMM, 
   }
 }
 
+async function sendBookingWebhook(booking) {
+  if (!WHATSAPP_WEBHOOK_URL) return { enabled: false, sent: false };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const payload = {
+      event: "booking.confirmed",
+      source: "barbearia_suprema",
+      sent_at: new Date().toISOString(),
+      owner_whatsapp: normalizeWa(OWNER_WHATSAPP),
+      message: buildOwnerMessageServer(booking),
+      booking: {
+        id: booking.id,
+        ticket: booking.ticket,
+        name: booking.name,
+        phone: booking.phone || "",
+        phone_e164: booking.phone ? cleanPhone(booking.phone) : "",
+        date: booking.date,
+        date_br: toBRDate(booking.date),
+        start: booking.start,
+        end: booking.end,
+        start_min: booking.start_min,
+        end_min: booking.end_min,
+        service_key: booking.service_key,
+        service_label: booking.service_label,
+        duration_min: booking.duration_min,
+        price_reais: booking.price_reais,
+        price_cents: booking.price_cents,
+      },
+    };
+
+    const headers = {
+      "Content-Type": "application/json",
+      "User-Agent": "BarbeariaSupremaAgenda/1.0",
+    };
+    if (WHATSAPP_WEBHOOK_SECRET) headers["X-Webhook-Secret"] = WHATSAPP_WEBHOOK_SECRET;
+
+    const response = await fetch(WHATSAPP_WEBHOOK_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      console.log("[WEBHOOK] erro ao disparar aviso:", response.status, text.slice(0, 300));
+      return { enabled: true, sent: false, status: response.status };
+    }
+
+    return { enabled: true, sent: true, status: response.status };
+  } catch (e) {
+    console.log("[WEBHOOK] falha ao disparar aviso:", e?.message || e);
+    return { enabled: true, sent: false, error: e?.message || String(e) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function buildFinanceRange(query) {
   const range = String(query.range || "day");
   const today = formatISODateLocal(nowInSaoPaulo());
@@ -419,6 +509,7 @@ app.get("/api/services", (req, res) => {
   res.json({
     ok: true,
     owner_whatsapp: OWNER_WHATSAPP,
+    webhook_enabled: Boolean(WHATSAPP_WEBHOOK_URL),
     open: toHHMM(OPEN_MIN),
     close: toHHMM(CLOSE_MIN),
     services: SERVICES.map(s => ({
@@ -472,7 +563,9 @@ app.post("/api/bookings", async (req, res) => {
   const svc = SERVICES.find(s => s.key === serviceKey);
 
   if (!name || name.length < 2) return res.status(400).json({ ok: false, error: "Nome inválido" });
-  if (!phone || phone.replace(/\D/g, "").length < 10) return res.status(400).json({ ok: false, error: "Telefone inválido" });
+  const phoneDigits = phone.replace(/\D/g, "");
+  if (phone && phoneDigits.length < 10) return res.status(400).json({ ok: false, error: "Telefone inválido" });
+  if (marketingOptIn && !phone) return res.status(400).json({ ok: false, error: "Para receber promoções, informe o WhatsApp." });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ ok: false, error: "Data inválida" });
   if (date < minAllowedBookingDateISO()) return res.status(400).json({ ok: false, error: "Só é possível agendar a partir de amanhã." });
   if (!svc) return res.status(400).json({ ok: false, error: "Serviço inválido" });
@@ -523,23 +616,36 @@ app.post("/api/bookings", async (req, res) => {
 
     await client.query("COMMIT");
 
+    const bookingResponse = {
+      id: ins.rows[0].id,
+      ticket: ins.rows[0].ticket || ins.rows[0].ticket_code,
+      created_at: ins.rows[0].created_at,
+      name,
+      phone,
+      date,
+      start: toHHMM(startMin),
+      end: toHHMM(endMin),
+      start_min: startMin,
+      end_min: endMin,
+      service_key: svc.key,
+      service_label: svc.label,
+      duration_min: svc.duration_min,
+      price_reais: svc.price_reais,
+      price_cents: priceCents,
+      owner_whatsapp: OWNER_WHATSAPP,
+    };
+
+    const webhookResult = await sendBookingWebhook(bookingResponse);
     sendOwnerWhatsAppTemplate({ name, serviceLabel: svc.label, date, startHHMM: toHHMM(startMin), ticket }).catch(() => {});
 
     res.json({
       ok: true,
+      webhook_enabled: webhookResult.enabled,
+      webhook_sent: webhookResult.sent,
       booking: {
-        id: ins.rows[0].id,
-        ticket: ins.rows[0].ticket || ins.rows[0].ticket_code,
-        created_at: ins.rows[0].created_at,
-        name,
-        phone,
-        date,
-        start: toHHMM(startMin),
-        end: toHHMM(endMin),
-        service_label: svc.label,
-        duration_min: svc.duration_min,
-        price_reais: svc.price_reais,
-        owner_whatsapp: OWNER_WHATSAPP,
+        ...bookingResponse,
+        webhook_enabled: webhookResult.enabled,
+        webhook_sent: webhookResult.sent,
       },
     });
   } catch (e) {
@@ -831,6 +937,7 @@ app.get("*", (req, res) => {
     app.listen(PORT, () => {
       console.log(`Server running on ${PORT}`);
       console.log(`OWNER_WHATSAPP=${OWNER_WHATSAPP}`);
+      console.log(`WHATSAPP_WEBHOOK_URL=${WHATSAPP_WEBHOOK_URL ? "configurado" : "não configurado"}`);
       console.log(`Agenda: ${toHHMM(OPEN_MIN)} até ${toHHMM(CLOSE_MIN)} / passo ${SLOT_STEP}min`);
     });
   } catch (e) {

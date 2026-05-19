@@ -2,10 +2,11 @@ const el = (id) => document.getElementById(id);
 
 const state = {
   services: [],
-  ownerWhatsapp: "32998195165",
+  ownerWhatsapp: "3298195165",
+  webhookEnabled: false,
   selectedService: null,
   selectedDate: null,
-  mode: "quick"
+  mode: "with_phone"
 };
 
 function setActiveStep(n){
@@ -152,7 +153,7 @@ function formatPhoneBR(raw){
   const dig = onlyDigits(raw);
   if (dig.length === 11) return `(${dig.slice(0,2)}) ${dig.slice(2,7)}-${dig.slice(7)}`;
   if (dig.length === 10) return `(${dig.slice(0,2)}) ${dig.slice(2,6)}-${dig.slice(6)}`;
-  return raw;
+  return raw ? raw : "Não informado";
 }
 
 function toWaNumber(raw){
@@ -166,6 +167,47 @@ function waLink(number, text){
   return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
 }
 
+function buildOwnerMessage(b){
+  const phoneText = b.phone ? formatPhoneBR(b.phone) : "Não informado";
+  return `✅ Novo agendamento confirmado - Barbearia Suprema
+Ticket: ${b.ticket}
+Cliente: ${b.name}
+Telefone: ${phoneText}
+Data: ${toBRDate(b.date)}
+Horário: ${b.start} às ${b.end}
+Serviço: ${b.service_label}
+Valor: R$ ${b.price_reais}`;
+}
+
+function ownerWhatsAppUrl(b){
+  return waLink(toWaNumber(b.owner_whatsapp || state.ownerWhatsapp), buildOwnerMessage(b));
+}
+
+function setMode(mode){
+  state.mode = mode === "name_only" ? "name_only" : "with_phone";
+  const isNameOnly = state.mode === "name_only";
+
+  const modeQuick = el("modeQuick");
+  const modeNameOnly = el("modeNameOnly");
+  const phoneField = el("phoneField");
+  const phone = el("phone");
+  const promoBox = el("promoBox");
+  const promoOpt = el("promoOpt");
+  const birth = el("birth");
+  const phoneOptional = el("phoneOptional");
+
+  if(modeQuick) modeQuick.classList.toggle("is-active", !isNameOnly);
+  if(modeNameOnly) modeNameOnly.classList.toggle("is-active", isNameOnly);
+  if(phoneField) phoneField.style.display = isNameOnly ? "none" : "";
+  if(phone) phone.required = !isNameOnly;
+  if(phoneOptional) phoneOptional.textContent = isNameOnly ? "" : "";
+  if(promoBox) promoBox.style.display = isNameOnly ? "none" : "";
+  if(isNameOnly){
+    if(promoOpt) promoOpt.checked = false;
+    if(birth) birth.value = "";
+  }
+}
+
 async function loadServices(){
   const r = await fetch("/api/services");
   const j = await r.json();
@@ -173,6 +215,7 @@ async function loadServices(){
 
   state.services = j.services;
   if (j.owner_whatsapp) state.ownerWhatsapp = String(j.owner_whatsapp);
+  state.webhookEnabled = Boolean(j.webhook_enabled);
   el("brandHours").textContent = `${j.open} às ${j.close}`;
 
   const sel = el("service");
@@ -257,20 +300,28 @@ function showTicket(b){
   el("tService").textContent = `${b.service_label} (${b.duration_min} min)`;
   el("tPrice").textContent = `R$ ${b.price_reais}`;
 
-  const msg =
-`✅ Agendamento confirmado (Barbearia Suprema)
-Ticket: ${b.ticket}
-Cliente: ${b.name}
-Data: ${toBRDate(b.date)}
-Horário: ${b.start}
-Serviço: ${b.service_label}
-Valor: R$ ${b.price_reais}
-
-Guarde seu ticket.`;
+  let status = document.getElementById('waAutoStatus');
+  if(!status){
+    status = document.createElement('div');
+    status.id = 'waAutoStatus';
+    status.className = 'hint wa-auto-status';
+    const grid = document.querySelector('.ticket-grid');
+    if(grid) grid.insertAdjacentElement('afterend', status);
+  }
+  if(status){
+    if(b.webhook_enabled && b.webhook_sent){
+      status.textContent = 'Aviso automático enviado para a barbearia pela automação.';
+    } else if(b.webhook_enabled && !b.webhook_sent){
+      status.textContent = 'Agendamento salvo. A automação do WhatsApp não confirmou o envio, use o botão abaixo se precisar reenviar manualmente.';
+    } else {
+      status.textContent = 'Agendamento salvo. Use o botão abaixo para abrir o WhatsApp com a mensagem pronta.';
+    }
+  }
 
   const btn = el('btnWhatsTicket');
   if(btn){
-    btn.href = waLink(toWaNumber(b.owner_whatsapp || state.ownerWhatsapp), msg);
+    btn.href = ownerWhatsAppUrl(b);
+    btn.textContent = (b.webhook_enabled && b.webhook_sent) ? 'Reenviar aviso no WhatsApp' : 'Enviar comprovante no WhatsApp';
     btn.style.display = '';
   }
   el("ticketBox").style.display = "block";
@@ -304,9 +355,10 @@ async function init(){
     el('btnConfirm').disabled = true;
   }
 
-  // Promoções: opção sempre disponível no cadastro do agendamento
-  const promoBox = el('promoBox');
-  if(promoBox) promoBox.style.display = '';
+  // Modo do agendamento: com WhatsApp ou sem cadastro, só nome
+  setMode("with_phone");
+  if(el("modeQuick")) el("modeQuick").addEventListener("click", ()=> setMode("with_phone"));
+  if(el("modeNameOnly")) el("modeNameOnly").addEventListener("click", ()=> setMode("name_only"));
 
   el("service").addEventListener("change", ()=>{
     updateServiceInfo();
@@ -354,7 +406,7 @@ async function init(){
     const name = el('name').value.trim();
     const phone = onlyDigits(el('phone').value);
     if(name.length < 2) return 'Digite seu nome.';
-    if(!(phone.length === 10 || phone.length === 11)) return 'Digite um WhatsApp válido.';
+    if(state.mode !== 'name_only' && !(phone.length === 10 || phone.length === 11)) return 'Digite um WhatsApp válido ou escolha "Sem cadastro, só nome".';
     return '';
   }
   function validStep2(){
@@ -402,12 +454,12 @@ async function init(){
 
     const payload = {
       name: el("name").value.trim(),
-      phone: el("phone").value.trim(),
+      phone: state.mode === 'name_only' ? '' : el("phone").value.trim(),
       date: el("date").value,
       service_key: el("service").value,
       start_min: Number(el("slot").value),
-      marketing_opt_in: Boolean(el('promoOpt')?.checked),
-      birth_date: String(el('birth')?.value || '')
+      marketing_opt_in: state.mode === 'name_only' ? false : Boolean(el('promoOpt')?.checked),
+      birth_date: state.mode === 'name_only' ? '' : String(el('birth')?.value || '')
     };
 
     if(!payload.start_min){
@@ -417,6 +469,19 @@ async function init(){
 
     el("btnConfirm").disabled = true;
     el("btnConfirm").textContent = "Confirmando...";
+
+    // Se não tiver webhook configurado, abre uma aba no clique do usuário
+    // e depois coloca a mensagem pronta. Com webhook, não abre nada: a automação cuida do aviso.
+    let waPopup = null;
+    if(!state.webhookEnabled){
+      try{
+        waPopup = window.open("about:blank", "barbearia_aviso_whatsapp");
+        if(waPopup){
+          waPopup.document.write("<title>WhatsApp</title><body style='font-family:Arial;padding:22px'>Preparando aviso para a barbearia...</body>");
+        }
+      }catch{}
+    }
+
     let success = false;
     try{
       const r = await fetch("/api/bookings", {
@@ -426,6 +491,7 @@ async function init(){
       });
       const j = await r.json();
       if(!j.ok){
+        if(waPopup) try{ waPopup.close(); }catch{}
         showInitError(j.error || "Erro ao confirmar.");
         return;
       }
@@ -433,6 +499,17 @@ async function init(){
       success = true;
       state.__bookingConfirmed = true;
       showTicket(j.booking);
+
+      const waUrl = ownerWhatsAppUrl(j.booking);
+      if(!j.booking.webhook_enabled){
+        if(waPopup){
+          waPopup.location.href = waUrl;
+        } else {
+          setTimeout(()=> window.open(waUrl, "_blank", "noopener"), 250);
+        }
+      } else if(waPopup){
+        try{ waPopup.close(); }catch{}
+      }
 
       // Esconde a barra de navegação para não parecer que "ainda falta confirmar"
       const bottom = document.querySelector('.bottom-bar');
@@ -442,6 +519,7 @@ async function init(){
       // Atualiza slots após reservar
       await loadSlots();
     }catch(e){
+      if(waPopup) try{ waPopup.close(); }catch{}
       console.error(e);
       showInitError("Erro ao confirmar (DB).");
     }finally{
@@ -477,7 +555,7 @@ async function init(){
     el("phone").value = "";
     if(el('birth')) el('birth').value = '';
     if(el('promoOpt')) el('promoOpt').checked = false;
-    if(el('promoBox')) el('promoBox').style.display = '';
+    setMode("with_phone");
     el("slot").value = "";
     el("name").focus();
     showStep(1);
