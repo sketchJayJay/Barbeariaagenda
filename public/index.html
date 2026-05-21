@@ -57,11 +57,18 @@
   <section class="step-card" id="step1">
     <div class="step-title"><span class="badge">1</span> Seus dados</div>
 
-    <div class="hint">Escolha se o cliente quer agendar só com o nome ou deixar WhatsApp para contato e promoções.</div>
+    <div class="hint">Escolha se o cliente quer usar um cadastro salvo, criar/atualizar cadastro com WhatsApp ou agendar só com o nome.</div>
 
     <div class="choice-row mode-row" aria-label="Tipo de agendamento">
+      <button type="button" id="modeExisting" class="choice-btn">Já tenho cadastro</button>
       <button type="button" id="modeQuick" class="choice-btn is-active">Agendar com WhatsApp</button>
       <button type="button" id="modeNameOnly" class="choice-btn">Sem cadastro, só nome</button>
+    </div>
+
+    <div id="existingBox" class="lookup-box" style="display:none">
+      <div class="hint">Digite o WhatsApp usado no cadastro para puxar os dados salvos.</div>
+      <button type="button" id="btnFindCustomer" class="ghost lookup-btn">Buscar cadastro</button>
+      <div id="lookupStatus" class="lookup-status" aria-live="polite"></div>
     </div>
 
     <div class="grid2">

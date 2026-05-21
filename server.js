@@ -521,6 +521,41 @@ app.get("/api/services", (req, res) => {
   });
 });
 
+app.get("/api/customers/lookup", async (req, res) => {
+  try {
+    const phone = String(req.query.phone || "").trim();
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 10) return res.status(400).json({ ok: false, error: "Informe um WhatsApp válido." });
+
+    const phoneE164 = cleanPhone(phone);
+    const { rows } = await getPool().query(
+      `SELECT id, name, phone_e164, birth_date, marketing_opt_in, created_at
+       FROM customers
+       WHERE phone_e164=$1
+       LIMIT 1`,
+      [phoneE164]
+    );
+
+    if (!rows[0]) return res.json({ ok: true, found: false });
+
+    res.json({
+      ok: true,
+      found: true,
+      customer: {
+        id: rows[0].id,
+        name: rows[0].name || "",
+        phone: rows[0].phone_e164 || phoneE164,
+        phone_br: formatPhoneBR(rows[0].phone_e164 || phoneE164),
+        birth_date: rows[0].birth_date || "",
+        marketing_opt_in: Boolean(rows[0].marketing_opt_in),
+      },
+    });
+  } catch (e) {
+    console.error("customer lookup error:", e);
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
 app.get("/api/slots", async (req, res) => {
   try {
     const date = String(req.query.date || "");
@@ -594,16 +629,16 @@ app.post("/api/bookings", async (req, res) => {
       return res.status(409).json({ ok: false, error: "Horário acabou de ser ocupado. Escolha outro." });
     }
 
-    if (marketingOptIn) {
+    if (phone) {
       const phoneE164 = cleanPhone(phone);
       await client.query(
         `INSERT INTO customers (name, phone_e164, birth_date, marketing_opt_in)
-         VALUES ($1,$2,$3,TRUE)
+         VALUES ($1,$2,$3,$4)
          ON CONFLICT (phone_e164) DO UPDATE
          SET name=EXCLUDED.name,
              birth_date=COALESCE(EXCLUDED.birth_date, customers.birth_date),
-             marketing_opt_in=TRUE`,
-        [name, phoneE164, birthDate || null]
+             marketing_opt_in=(customers.marketing_opt_in OR EXCLUDED.marketing_opt_in)`,
+        [name, phoneE164, birthDate || null, marketingOptIn]
       );
     }
 

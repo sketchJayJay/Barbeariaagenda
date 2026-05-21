@@ -640,3 +640,39 @@ input[type="checkbox"]{
 .promo-box .hint{
   margin-top: 8px;
 }
+
+/* ===== Cadastro existente ===== */
+.lookup-box{
+  margin: 10px 0 14px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.13);
+  background: rgba(255,255,255,.06);
+}
+.lookup-btn{
+  margin-top: 10px;
+  width: 100%;
+  font-weight: 900;
+}
+.lookup-status{
+  min-height: 20px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: rgba(255,255,255,.78);
+}
+.lookup-status.ok{
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: #dcfce7;
+  background: rgba(34,197,94,.12);
+  border: 1px solid rgba(34,197,94,.32);
+  font-weight: 800;
+}
+.lookup-status.bad{
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: #ffe2e2;
+  background: rgba(239,68,68,.12);
+  border: 1px solid rgba(239,68,68,.32);
+  font-weight: 800;
+}

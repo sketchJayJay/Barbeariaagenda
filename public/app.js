@@ -6,7 +6,9 @@ const state = {
   webhookEnabled: false,
   selectedService: null,
   selectedDate: null,
-  mode: "with_phone"
+  mode: "with_phone",
+  loadedCustomerPhone: "",
+  loadedCustomerName: ""
 };
 
 function setActiveStep(n){
@@ -183,28 +185,105 @@ function ownerWhatsAppUrl(b){
   return waLink(toWaNumber(b.owner_whatsapp || state.ownerWhatsapp), buildOwnerMessage(b));
 }
 
-function setMode(mode){
-  state.mode = mode === "name_only" ? "name_only" : "with_phone";
-  const isNameOnly = state.mode === "name_only";
+function setLookupStatus(type, msg){
+  const box = el("lookupStatus");
+  if(!box) return;
+  box.className = "lookup-status" + (type ? ` ${type}` : "");
+  box.textContent = msg || "";
+}
 
+function resetLoadedCustomer(){
+  state.loadedCustomerPhone = "";
+  state.loadedCustomerName = "";
+}
+
+function setMode(mode){
+  state.mode = mode === "name_only" ? "name_only" : (mode === "existing" ? "existing" : "with_phone");
+  const isNameOnly = state.mode === "name_only";
+  const isExisting = state.mode === "existing";
+
+  const modeExisting = el("modeExisting");
   const modeQuick = el("modeQuick");
   const modeNameOnly = el("modeNameOnly");
   const phoneField = el("phoneField");
   const phone = el("phone");
+  const name = el("name");
   const promoBox = el("promoBox");
   const promoOpt = el("promoOpt");
   const birth = el("birth");
   const phoneOptional = el("phoneOptional");
+  const existingBox = el("existingBox");
 
-  if(modeQuick) modeQuick.classList.toggle("is-active", !isNameOnly);
+  if(modeExisting) modeExisting.classList.toggle("is-active", isExisting);
+  if(modeQuick) modeQuick.classList.toggle("is-active", state.mode === "with_phone");
   if(modeNameOnly) modeNameOnly.classList.toggle("is-active", isNameOnly);
   if(phoneField) phoneField.style.display = isNameOnly ? "none" : "";
+  if(existingBox) existingBox.style.display = isExisting ? "" : "none";
   if(phone) phone.required = !isNameOnly;
-  if(phoneOptional) phoneOptional.textContent = isNameOnly ? "" : "";
+  if(phoneOptional) phoneOptional.textContent = isExisting ? " cadastrado" : "";
   if(promoBox) promoBox.style.display = isNameOnly ? "none" : "";
+
   if(isNameOnly){
+    resetLoadedCustomer();
+    setLookupStatus("", "");
     if(promoOpt) promoOpt.checked = false;
     if(birth) birth.value = "";
+    if(phone) phone.value = "";
+    if(name) name.readOnly = false;
+  } else if(isExisting){
+    resetLoadedCustomer();
+    setLookupStatus("", "");
+    if(name) name.readOnly = false;
+  } else {
+    resetLoadedCustomer();
+    setLookupStatus("", "");
+    if(name) name.readOnly = false;
+  }
+}
+
+async function findExistingCustomer(){
+  const phone = el("phone");
+  const name = el("name");
+  const promoOpt = el("promoOpt");
+  const birth = el("birth");
+  const digits = onlyDigits(phone?.value || "");
+
+  resetLoadedCustomer();
+  if(!(digits.length === 10 || digits.length === 11)){
+    setLookupStatus("bad", "Digite o WhatsApp cadastrado com DDD.");
+    return false;
+  }
+
+  const btn = el("btnFindCustomer");
+  if(btn){ btn.disabled = true; btn.textContent = "Buscando..."; }
+  setLookupStatus("", "Consultando cadastro...");
+
+  try{
+    const r = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(phone.value)}`);
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error || "Falha ao buscar cadastro.");
+
+    if(!j.found){
+      setLookupStatus("bad", "Cadastro não encontrado. Use 'Agendar com WhatsApp' para criar um cadastro ou 'Sem cadastro, só nome'.");
+      return false;
+    }
+
+    const c = j.customer || {};
+    if(name) name.value = c.name || "";
+    if(phone) phone.value = c.phone_br || phone.value;
+    if(birth) birth.value = c.birth_date || "";
+    if(promoOpt) promoOpt.checked = Boolean(c.marketing_opt_in);
+
+    state.loadedCustomerPhone = toWaNumber(c.phone || phone.value);
+    state.loadedCustomerName = c.name || "";
+    setLookupStatus("ok", `Cadastro encontrado: ${c.name || "cliente"}. Pode continuar.`);
+    return true;
+  }catch(e){
+    console.error(e);
+    setLookupStatus("bad", e.message || "Erro ao buscar cadastro.");
+    return false;
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = "Buscar cadastro"; }
   }
 }
 
@@ -355,10 +434,18 @@ async function init(){
     el('btnConfirm').disabled = true;
   }
 
-  // Modo do agendamento: com WhatsApp ou sem cadastro, só nome
+  // Modo do agendamento: cadastro salvo, com WhatsApp ou sem cadastro, só nome
   setMode("with_phone");
+  if(el("modeExisting")) el("modeExisting").addEventListener("click", ()=> setMode("existing"));
   if(el("modeQuick")) el("modeQuick").addEventListener("click", ()=> setMode("with_phone"));
   if(el("modeNameOnly")) el("modeNameOnly").addEventListener("click", ()=> setMode("name_only"));
+  if(el("btnFindCustomer")) el("btnFindCustomer").addEventListener("click", ()=> findExistingCustomer());
+  if(el("phone")) el("phone").addEventListener("input", ()=>{
+    if(state.mode === "existing"){
+      resetLoadedCustomer();
+      setLookupStatus("", "Digite o WhatsApp e toque em Buscar cadastro.");
+    }
+  });
 
   el("service").addEventListener("change", ()=>{
     updateServiceInfo();
@@ -405,6 +492,12 @@ async function init(){
   function validStep1(){
     const name = el('name').value.trim();
     const phone = onlyDigits(el('phone').value);
+    if(state.mode === 'existing'){
+      if(!(phone.length === 10 || phone.length === 11)) return 'Digite o WhatsApp cadastrado com DDD.';
+      if(!state.loadedCustomerPhone || state.loadedCustomerPhone !== toWaNumber(el('phone').value)){
+        return 'Toque em "Buscar cadastro" antes de continuar.';
+      }
+    }
     if(name.length < 2) return 'Digite seu nome.';
     if(state.mode !== 'name_only' && !(phone.length === 10 || phone.length === 11)) return 'Digite um WhatsApp válido ou escolha "Sem cadastro, só nome".';
     return '';
@@ -555,6 +648,8 @@ async function init(){
     el("phone").value = "";
     if(el('birth')) el('birth').value = '';
     if(el('promoOpt')) el('promoOpt').checked = false;
+    resetLoadedCustomer();
+    setLookupStatus("", "");
     setMode("with_phone");
     el("slot").value = "";
     el("name").focus();
