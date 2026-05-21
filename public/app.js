@@ -197,6 +197,24 @@ function resetLoadedCustomer(){
   state.loadedCustomerName = "";
 }
 
+function showMainDataBox(show){
+  const box = el("mainDataBox");
+  if(box) box.style.display = show ? "" : "none";
+}
+
+function clearCustomerFields({ clearLookup=false } = {}){
+  const name = el("name");
+  const phone = el("phone");
+  const promoOpt = el("promoOpt");
+  const birth = el("birth");
+  const lookupPhone = el("lookupPhone");
+  if(name){ name.value = ""; name.readOnly = false; }
+  if(phone){ phone.value = ""; phone.readOnly = false; }
+  if(promoOpt) promoOpt.checked = false;
+  if(birth) birth.value = "";
+  if(clearLookup && lookupPhone) lookupPhone.value = "";
+}
+
 function setMode(mode){
   state.mode = mode === "name_only" ? "name_only" : (mode === "existing" ? "existing" : "with_phone");
   const isNameOnly = state.mode === "name_only";
@@ -213,44 +231,54 @@ function setMode(mode){
   const birth = el("birth");
   const phoneOptional = el("phoneOptional");
   const existingBox = el("existingBox");
+  const lookupPhone = el("lookupPhone");
 
   if(modeExisting) modeExisting.classList.toggle("is-active", isExisting);
   if(modeQuick) modeQuick.classList.toggle("is-active", state.mode === "with_phone");
   if(modeNameOnly) modeNameOnly.classList.toggle("is-active", isNameOnly);
-  if(phoneField) phoneField.style.display = isNameOnly ? "none" : "";
   if(existingBox) existingBox.style.display = isExisting ? "" : "none";
-  if(phone) phone.required = !isNameOnly;
-  if(phoneOptional) phoneOptional.textContent = isExisting ? " cadastrado" : "";
+  if(phoneField) phoneField.style.display = isNameOnly ? "none" : "";
+  if(phone) phone.required = !isNameOnly && !isExisting;
+  if(phoneOptional) phoneOptional.textContent = isExisting ? " carregado" : "";
   if(promoBox) promoBox.style.display = isNameOnly ? "none" : "";
 
+  resetLoadedCustomer();
+  setLookupStatus("", "");
+
+  if(isExisting){
+    clearCustomerFields();
+    showMainDataBox(false);
+    if(lookupPhone) lookupPhone.focus();
+    return;
+  }
+
+  showMainDataBox(true);
+  clearCustomerFields({ clearLookup: true });
+
   if(isNameOnly){
-    resetLoadedCustomer();
-    setLookupStatus("", "");
     if(promoOpt) promoOpt.checked = false;
     if(birth) birth.value = "";
     if(phone) phone.value = "";
     if(name) name.readOnly = false;
-  } else if(isExisting){
-    resetLoadedCustomer();
-    setLookupStatus("", "");
-    if(name) name.readOnly = false;
   } else {
-    resetLoadedCustomer();
-    setLookupStatus("", "");
     if(name) name.readOnly = false;
+    if(phone) phone.readOnly = false;
   }
 }
 
 async function findExistingCustomer(){
+  const lookupPhone = el("lookupPhone");
   const phone = el("phone");
   const name = el("name");
   const promoOpt = el("promoOpt");
   const birth = el("birth");
-  const digits = onlyDigits(phone?.value || "");
+  const rawPhone = lookupPhone?.value || phone?.value || "";
+  const digits = onlyDigits(rawPhone);
 
   resetLoadedCustomer();
+  showMainDataBox(false);
   if(!(digits.length === 10 || digits.length === 11)){
-    setLookupStatus("bad", "Digite o WhatsApp cadastrado com DDD.");
+    setLookupStatus("bad", "Digite o WhatsApp cadastrado com DDD. Ex: (32) 98428-5414.");
     return false;
   }
 
@@ -259,31 +287,34 @@ async function findExistingCustomer(){
   setLookupStatus("", "Consultando cadastro...");
 
   try{
-    const r = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(phone.value)}`);
+    const r = await fetch(`/api/customers/lookup?phone=${encodeURIComponent(rawPhone)}`);
     const j = await r.json();
     if(!j.ok) throw new Error(j.error || "Falha ao buscar cadastro.");
 
     if(!j.found){
-      setLookupStatus("bad", "Cadastro não encontrado. Use 'Agendar com WhatsApp' para criar um cadastro ou 'Sem cadastro, só nome'.");
+      clearCustomerFields();
+      setLookupStatus("bad", "Não encontramos esse WhatsApp. Toque em ‘Novo cadastro’ para cadastrar ou em ‘Agendar rápido’ para usar só o nome.");
       return false;
     }
 
     const c = j.customer || {};
-    if(name) name.value = c.name || "";
-    if(phone) phone.value = c.phone_br || phone.value;
+    if(name){ name.value = c.name || ""; name.readOnly = false; }
+    if(phone){ phone.value = c.phone_br || rawPhone; phone.readOnly = true; }
     if(birth) birth.value = c.birth_date || "";
     if(promoOpt) promoOpt.checked = Boolean(c.marketing_opt_in);
 
-    state.loadedCustomerPhone = toWaNumber(c.phone || phone.value);
+    state.loadedCustomerPhone = toWaNumber(c.phone || rawPhone);
     state.loadedCustomerName = c.name || "";
-    setLookupStatus("ok", `Cadastro encontrado: ${c.name || "cliente"}. Pode continuar.`);
+    showMainDataBox(true);
+    setLookupStatus("ok", `Cadastro carregado: ${c.name || "cliente"}. Agora é só tocar em Próximo.`);
     return true;
   }catch(e){
     console.error(e);
+    clearCustomerFields();
     setLookupStatus("bad", e.message || "Erro ao buscar cadastro.");
     return false;
   }finally{
-    if(btn){ btn.disabled = false; btn.textContent = "Buscar cadastro"; }
+    if(btn){ btn.disabled = false; btn.textContent = "Buscar"; }
   }
 }
 
@@ -440,10 +471,17 @@ async function init(){
   if(el("modeQuick")) el("modeQuick").addEventListener("click", ()=> setMode("with_phone"));
   if(el("modeNameOnly")) el("modeNameOnly").addEventListener("click", ()=> setMode("name_only"));
   if(el("btnFindCustomer")) el("btnFindCustomer").addEventListener("click", ()=> findExistingCustomer());
-  if(el("phone")) el("phone").addEventListener("input", ()=>{
+  if(el("lookupPhone")) el("lookupPhone").addEventListener("keydown", (ev)=>{
+    if(ev.key === "Enter"){
+      ev.preventDefault();
+      findExistingCustomer();
+    }
+  });
+  if(el("lookupPhone")) el("lookupPhone").addEventListener("input", ()=>{
     if(state.mode === "existing"){
       resetLoadedCustomer();
-      setLookupStatus("", "Digite o WhatsApp e toque em Buscar cadastro.");
+      showMainDataBox(false);
+      setLookupStatus("", "Digite o WhatsApp e toque em Buscar.");
     }
   });
 

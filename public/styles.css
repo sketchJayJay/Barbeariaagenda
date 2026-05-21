@@ -676,3 +676,66 @@ input[type="checkbox"]{
   border: 1px solid rgba(239,68,68,.32);
   font-weight: 800;
 }
+
+/* ===== Ajuste UX: cadastro existente mais claro ===== */
+.choice-intro{
+  margin-top: 0;
+  margin-bottom: 8px;
+  font-weight: 800;
+  color: rgba(255,255,255,.88);
+}
+.mode-row .choice-btn{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 72px;
+  text-align: center;
+}
+.choice-btn b{
+  display:block;
+  font-size: 15px;
+  line-height: 1.1;
+}
+.choice-btn small{
+  display:block;
+  font-size: 11px;
+  line-height: 1.2;
+  color: rgba(255,255,255,.72);
+  font-weight: 800;
+}
+.choice-btn.is-active small{
+  color: rgba(255,255,255,.92);
+}
+.lookup-title{
+  font-size: 15px;
+  font-weight: 950;
+  margin-bottom: 4px;
+}
+.lookup-row{
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 145px;
+  gap: 10px;
+  align-items: end;
+}
+.lookup-btn{
+  margin-top: 0;
+  height: 52px;
+}
+#mainDataBox{
+  margin-top: 12px;
+}
+#phone[readonly]{
+  opacity: .88;
+  cursor: not-allowed;
+}
+@media (max-width: 720px){
+  .lookup-row{
+    grid-template-columns: 1fr;
+  }
+  .lookup-btn{
+    width: 100%;
+  }
+}
