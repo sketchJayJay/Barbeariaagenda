@@ -138,22 +138,42 @@ async function loadFinance() {
   el("finList").innerHTML = `
   <table>
     <thead>
-      <tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Valor</th></tr>
+      <tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Ações</th></tr>
     </thead>
     <tbody>
       ${rows.map(it => {
         const pill = it.kind === "in" ? "ok" : "bad";
         const label = it.kind === "in" ? "Entrada" : "Saída";
+        const desc = it.description || "";
+        const isBookingEntry = Boolean(it.booking_id);
+        const delTitle = isBookingEntry
+          ? "Excluir este lançamento do financeiro. Use se o cliente não pagou."
+          : "Excluir este lançamento manual.";
         return `<tr>
           <td>${toBRDate(it.date)}</td>
           <td><span class="pill ${pill}">${label}</span></td>
-          <td>${escapeHtml(it.description || "")}</td>
+          <td>${escapeHtml(desc)}${isBookingEntry ? `<div class="muted2">Vinculado ao agendamento #${Number(it.booking_id)}</div>` : ""}</td>
           <td><b>${reais(it.amount_reais)}</b></td>
+          <td><button class="ghost small" title="${escapeHtml(delTitle)}" onclick="deleteFinance(${Number(it.id)}, ${isBookingEntry ? 'true' : 'false'})">Excluir</button></td>
         </tr>`;
       }).join("")}
     </tbody>
   </table>`;
 }
+
+window.deleteFinance = async (id, isBookingEntry = false) => {
+  const msg = isBookingEntry
+    ? "Excluir este lançamento do financeiro?\n\nUse esta opção quando o cliente não pagou. O agendamento continua salvo no histórico, mas o valor sai do financeiro."
+    : "Excluir este lançamento do financeiro?";
+  if (!confirm(msg)) return;
+
+  try {
+    await fetchJSON(`/api/admin/finance/${id}`, { method: "DELETE" });
+    await loadFinance();
+  } catch (e) {
+    alert("Erro ao excluir lançamento: " + e.message);
+  }
+};
 
 async function addFinance() {
   const kind = el("finKind").value;

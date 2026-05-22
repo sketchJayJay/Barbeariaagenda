@@ -971,6 +971,25 @@ app.get("/api/admin/finance/summary", adminAuth, async (req, res) => {
   }
 });
 
+
+app.delete("/api/admin/finance/:id", adminAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return res.status(400).json({ ok: false, error: "ID inválido" });
+  }
+
+  try {
+    const result = await getPool().query(`DELETE FROM finance WHERE id=$1 RETURNING id`, [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: "Lançamento não encontrado" });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("admin finance delete error:", e);
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
 app.post("/api/admin/finance", adminAuth, async (req, res) => {
   const kind = String(req.body.kind || "");
   const amount = Number(req.body.amount_reais);
