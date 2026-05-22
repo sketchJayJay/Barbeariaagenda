@@ -122,6 +122,13 @@ Serviço: ${b.service_label}
 Valor: R$ ${b.price_reais}`;
 }
 
+function buildExistingBookingError(b) {
+  if (!b) return "Esse cliente já possui um agendamento ativo. Consulte em Meus agendamentos.";
+  const start = b.start_min === null ? "--:--" : toHHMM(Number(b.start_min));
+  const service = b.service_label || "serviço";
+  return `Esse cliente já possui um agendamento ativo: ${service} em ${toBRDate(b.date)} às ${start}. Para remarcar, cancele ou finalize o agendamento atual no painel Admin.`;
+}
+
 // Regra: só permite agendamento a partir de amanhã
 function minAllowedBookingDateISO() {
   const spNow = nowInSaoPaulo();
@@ -666,6 +673,63 @@ app.post("/api/bookings", async (req, res) => {
 
   try {
     await client.query("BEGIN");
+
+    // Não permite que o mesmo cliente tenha dois agendamentos ativos ao mesmo tempo.
+    // Com WhatsApp, a validação usa o número normalizado para pegar cadastros antigos e novos.
+    // Sem WhatsApp, bloqueia por nome exato apenas nos agendamentos rápidos sem telefone.
+    let existingBooking = null;
+    if (phone) {
+      const phoneE164 = cleanPhone(phone);
+      const variants = Array.from(new Set([
+        phoneDigits,
+        phoneE164,
+        phoneE164.startsWith("55") ? phoneE164.slice(2) : "",
+      ].filter(Boolean)));
+
+      const existing = await client.query(
+        `SELECT id, COALESCE(ticket, ticket_code) AS ticket, service_label, date, start_min, end_min
+         FROM bookings
+         WHERE status='active'
+           AND date >= $1
+           AND regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') = ANY($2)
+         ORDER BY date ASC, start_min ASC
+         LIMIT 1`,
+        [formatISODateLocal(nowInSaoPaulo()), variants]
+      );
+      existingBooking = existing.rows[0] || null;
+    } else {
+      const existing = await client.query(
+        `SELECT id, COALESCE(ticket, ticket_code) AS ticket, service_label, date, start_min, end_min
+         FROM bookings
+         WHERE status='active'
+           AND date >= $1
+           AND COALESCE(regexp_replace(phone, '[^0-9]', '', 'g'), '') = ''
+           AND lower(trim(name)) = lower(trim($2))
+         ORDER BY date ASC, start_min ASC
+         LIMIT 1`,
+        [formatISODateLocal(nowInSaoPaulo()), name]
+      );
+      existingBooking = existing.rows[0] || null;
+    }
+
+    if (existingBooking) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        ok: false,
+        code: "customer_already_has_booking",
+        error: buildExistingBookingError(existingBooking),
+        existing_booking: {
+          id: existingBooking.id,
+          ticket: existingBooking.ticket || "",
+          service_label: existingBooking.service_label || "Serviço",
+          date: existingBooking.date,
+          date_br: toBRDate(existingBooking.date),
+          start: existingBooking.start_min === null ? "--:--" : toHHMM(Number(existingBooking.start_min)),
+          end: existingBooking.end_min === null ? "--:--" : toHHMM(Number(existingBooking.end_min)),
+        },
+      });
+    }
+
     const conflict = await client.query(
       `SELECT 1 FROM bookings
        WHERE date=$1 AND status='active'

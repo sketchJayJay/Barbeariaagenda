@@ -8,7 +8,8 @@ const state = {
   selectedDate: null,
   mode: "with_phone",
   loadedCustomerPhone: "",
-  loadedCustomerName: ""
+  loadedCustomerName: "",
+  loadedCustomerActiveBookings: []
 };
 
 function setActiveStep(n){
@@ -195,6 +196,12 @@ function setLookupStatus(type, msg){
 function resetLoadedCustomer(){
   state.loadedCustomerPhone = "";
   state.loadedCustomerName = "";
+  state.loadedCustomerActiveBookings = [];
+}
+
+function bookingSummaryText(b){
+  if(!b) return "";
+  return `${b.service_label || "Serviço"} em ${b.date_br || toBRDate(b.date)} às ${b.start || "--:--"}`;
 }
 
 function showMainDataBox(show){
@@ -306,11 +313,17 @@ async function findExistingCustomer(){
     state.loadedCustomerPhone = toWaNumber(c.phone || rawPhone);
     state.loadedCustomerName = c.name || "";
     showMainDataBox(true);
-    setLookupStatus("ok", `Cadastro carregado: ${c.name || "cliente"}. Agora é só tocar em Próximo.`);
-
     const myBookingPhone = el("myBookingPhone");
     if(myBookingPhone) myBookingPhone.value = c.phone_br || rawPhone;
-    loadCustomerBookings(c.phone || rawPhone).catch(()=>{});
+    const bookings = await loadCustomerBookings(c.phone || rawPhone, { silentNoResults: true });
+    state.loadedCustomerActiveBookings = Array.isArray(bookings) ? bookings : [];
+
+    if(state.loadedCustomerActiveBookings.length > 0){
+      const first = state.loadedCustomerActiveBookings[0];
+      setLookupStatus("bad", `Cadastro carregado, mas esse cliente já tem agendamento ativo: ${bookingSummaryText(first)}. Para remarcar, cancele/finalize no Admin.`);
+    } else {
+      setLookupStatus("ok", `Cadastro carregado: ${c.name || "cliente"}. Agora é só tocar em Próximo.`);
+    }
     return true;
   }catch(e){
     console.error(e);
@@ -358,13 +371,13 @@ async function loadCustomerBookings(rawPhone, opts = {}){
   const digits = onlyDigits(rawPhone);
   renderMyBookings([]);
   if(!(digits.length === 10 || digits.length === 11 || (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)))){
-    setMyBookingStatus("bad", "Digite o WhatsApp cadastrado com DDD.");
-    return false;
+    if(!opts.silentNoResults) setMyBookingStatus("bad", "Digite o WhatsApp cadastrado com DDD.");
+    return [];
   }
 
   const btn = el("btnFindBookings");
   if(btn){ btn.disabled = true; btn.textContent = "Buscando..."; }
-  setMyBookingStatus("", "Procurando agendamentos...");
+  if(!opts.silentNoResults) setMyBookingStatus("", "Procurando agendamentos...");
 
   try{
     const r = await fetch(`/api/customers/bookings?phone=${encodeURIComponent(rawPhone)}`);
@@ -373,19 +386,19 @@ async function loadCustomerBookings(rawPhone, opts = {}){
 
     const bookings = Array.isArray(j.bookings) ? j.bookings : [];
     if(bookings.length === 0){
-      setMyBookingStatus("bad", "Nenhum agendamento ativo encontrado para esse WhatsApp.");
+      if(!opts.silentNoResults) setMyBookingStatus("bad", "Nenhum agendamento ativo encontrado para esse WhatsApp.");
       renderMyBookings([]);
-      return true;
+      return [];
     }
 
     setMyBookingStatus("ok", bookings.length === 1 ? "Encontramos 1 agendamento ativo." : `Encontramos ${bookings.length} agendamentos ativos.`);
     renderMyBookings(bookings);
-    return true;
+    return bookings;
   }catch(e){
     console.error(e);
-    setMyBookingStatus("bad", e.message || "Erro ao buscar agendamentos.");
+    if(!opts.silentNoResults) setMyBookingStatus("bad", e.message || "Erro ao buscar agendamentos.");
     renderMyBookings([]);
-    return false;
+    return [];
   }finally{
     if(btn){ btn.disabled = false; btn.textContent = "Ver"; }
   }
@@ -614,6 +627,9 @@ async function init(){
       if(!(phone.length === 10 || phone.length === 11)) return 'Digite o WhatsApp cadastrado com DDD.';
       if(!state.loadedCustomerPhone || state.loadedCustomerPhone !== toWaNumber(el('phone').value)){
         return 'Toque em "Buscar cadastro" antes de continuar.';
+      }
+      if(Array.isArray(state.loadedCustomerActiveBookings) && state.loadedCustomerActiveBookings.length > 0){
+        return `Esse cliente já possui agendamento ativo: ${bookingSummaryText(state.loadedCustomerActiveBookings[0])}. Para remarcar, cancele/finalize no Admin.`;
       }
     }
     if(name.length < 2) return 'Digite seu nome.';
