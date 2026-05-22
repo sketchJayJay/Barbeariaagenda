@@ -209,6 +209,20 @@
       <div class="note">
         <b>WhatsApp:</b> com webhook configurado, o sistema envia o aviso para a automação; sem webhook, abre o WhatsApp com a mensagem pronta.
       </div>
+
+      <div class="client-booking-box" id="clientBookingBox">
+        <div class="lookup-title">Meus agendamentos</div>
+        <div class="hint">Cliente cadastrado pode consultar os próximos horários pelo WhatsApp usado no cadastro.</div>
+        <div class="lookup-row compact-row">
+          <div class="field field-app lookup-phone-field">
+            <label for="myBookingPhone">WhatsApp cadastrado</label>
+            <input id="myBookingPhone" placeholder="(xx) xxxxx-xxxx" inputmode="tel" />
+          </div>
+          <button type="button" id="btnFindBookings" class="ghost lookup-btn">Ver</button>
+        </div>
+        <div id="myBookingStatus" class="lookup-status" aria-live="polite"></div>
+        <div id="myBookingList" class="client-booking-list"></div>
+      </div>
     </aside>
   </main>
 

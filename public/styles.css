@@ -739,3 +739,61 @@ input[type="checkbox"]{
     width: 100%;
   }
 }
+
+/* ===== Cliente: consultar agendamentos no site ===== */
+.client-booking-box{
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.13);
+  background: rgba(255,255,255,.06);
+}
+.client-booking-list{
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+.client-booking-item{
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(34,197,94,.28);
+  background: rgba(34,197,94,.10);
+}
+.client-booking-main{
+  display: grid;
+  gap: 4px;
+}
+.client-booking-main b{
+  color: #fff;
+  font-size: 15px;
+}
+.client-booking-main span{
+  color: rgba(255,255,255,.84);
+  font-size: 13px;
+  font-weight: 750;
+}
+.client-booking-meta{
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: rgba(255,255,255,.78);
+  font-size: 12px;
+}
+.client-booking-meta span{
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.20);
+  border: 1px solid rgba(255,255,255,.10);
+}
+.compact-row{
+  grid-template-columns: 1fr 92px;
+}
+.compact-row .lookup-btn{
+  width: 100%;
+}
+@media (max-width: 720px){
+  .compact-row{
+    grid-template-columns: 1fr;
+  }
+}

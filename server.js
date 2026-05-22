@@ -556,6 +556,56 @@ app.get("/api/customers/lookup", async (req, res) => {
   }
 });
 
+
+app.get("/api/customers/bookings", async (req, res) => {
+  try {
+    const phone = String(req.query.phone || "").trim();
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 10) return res.status(400).json({ ok: false, error: "Informe o WhatsApp cadastrado com DDD." });
+
+    const phoneE164 = cleanPhone(phone);
+    const variants = Array.from(new Set([
+      digits,
+      phoneE164,
+      phoneE164.startsWith("55") ? phoneE164.slice(2) : "",
+    ].filter(Boolean)));
+    const today = formatISODateLocal(nowInSaoPaulo());
+
+    const { rows } = await getPool().query(
+      `SELECT id,
+              COALESCE(ticket, ticket_code) AS ticket,
+              name, phone, service_label, duration_min,
+              COALESCE(price_cents, ROUND(COALESCE(price, 0) * 100)::int) AS price_cents,
+              date, start_min, end_min, status, created_at
+       FROM bookings
+       WHERE regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') = ANY($1)
+         AND date >= $2
+         AND status = 'active'
+       ORDER BY date ASC, start_min ASC
+       LIMIT 10`,
+      [variants, today]
+    );
+
+    res.json({ ok: true, bookings: rows.map(r => ({
+      id: r.id,
+      ticket: r.ticket || "",
+      name: r.name || "",
+      phone: r.phone || "",
+      service_label: r.service_label || "Serviço",
+      duration_min: Number(r.duration_min || 0),
+      price_reais: (Number(r.price_cents || 0) / 100).toFixed(2),
+      date: r.date,
+      date_br: toBRDate(r.date),
+      start: r.start_min === null ? "--:--" : toHHMM(Number(r.start_min)),
+      end: r.end_min === null ? "--:--" : toHHMM(Number(r.end_min)),
+      status: r.status || "active",
+    })) });
+  } catch (e) {
+    console.error("customer bookings error:", e);
+    res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
 app.get("/api/slots", async (req, res) => {
   try {
     const date = String(req.query.date || "");

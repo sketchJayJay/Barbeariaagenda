@@ -307,6 +307,10 @@ async function findExistingCustomer(){
     state.loadedCustomerName = c.name || "";
     showMainDataBox(true);
     setLookupStatus("ok", `Cadastro carregado: ${c.name || "cliente"}. Agora é só tocar em Próximo.`);
+
+    const myBookingPhone = el("myBookingPhone");
+    if(myBookingPhone) myBookingPhone.value = c.phone_br || rawPhone;
+    loadCustomerBookings(c.phone || rawPhone).catch(()=>{});
     return true;
   }catch(e){
     console.error(e);
@@ -315,6 +319,75 @@ async function findExistingCustomer(){
     return false;
   }finally{
     if(btn){ btn.disabled = false; btn.textContent = "Buscar"; }
+  }
+}
+
+
+function setMyBookingStatus(type, msg){
+  const box = el("myBookingStatus");
+  if(!box) return;
+  box.className = "lookup-status" + (type ? ` ${type}` : "");
+  box.textContent = msg || "";
+}
+
+function renderMyBookings(bookings){
+  const list = el("myBookingList");
+  if(!list) return;
+  list.innerHTML = "";
+  if(!bookings || bookings.length === 0){
+    return;
+  }
+  bookings.forEach(b => {
+    const item = document.createElement("div");
+    item.className = "client-booking-item";
+    item.innerHTML = `
+      <div class="client-booking-main">
+        <b>${b.service_label || "Serviço"}</b>
+        <span>${b.date_br || toBRDate(b.date)} • ${b.start || "--:--"} às ${b.end || "--:--"}</span>
+      </div>
+      <div class="client-booking-meta">
+        <span>Ticket: <b>${b.ticket || "-"}</b></span>
+        <span>Valor: <b>R$ ${b.price_reais || "0,00"}</b></span>
+      </div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+async function loadCustomerBookings(rawPhone, opts = {}){
+  const digits = onlyDigits(rawPhone);
+  renderMyBookings([]);
+  if(!(digits.length === 10 || digits.length === 11 || (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)))){
+    setMyBookingStatus("bad", "Digite o WhatsApp cadastrado com DDD.");
+    return false;
+  }
+
+  const btn = el("btnFindBookings");
+  if(btn){ btn.disabled = true; btn.textContent = "Buscando..."; }
+  setMyBookingStatus("", "Procurando agendamentos...");
+
+  try{
+    const r = await fetch(`/api/customers/bookings?phone=${encodeURIComponent(rawPhone)}`);
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error || "Falha ao buscar agendamentos.");
+
+    const bookings = Array.isArray(j.bookings) ? j.bookings : [];
+    if(bookings.length === 0){
+      setMyBookingStatus("bad", "Nenhum agendamento ativo encontrado para esse WhatsApp.");
+      renderMyBookings([]);
+      return true;
+    }
+
+    setMyBookingStatus("ok", bookings.length === 1 ? "Encontramos 1 agendamento ativo." : `Encontramos ${bookings.length} agendamentos ativos.`);
+    renderMyBookings(bookings);
+    return true;
+  }catch(e){
+    console.error(e);
+    setMyBookingStatus("bad", e.message || "Erro ao buscar agendamentos.");
+    renderMyBookings([]);
+    return false;
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = "Ver"; }
   }
 }
 
@@ -482,6 +555,13 @@ async function init(){
       resetLoadedCustomer();
       showMainDataBox(false);
       setLookupStatus("", "Digite o WhatsApp e toque em Buscar.");
+    }
+  });
+  if(el("btnFindBookings")) el("btnFindBookings").addEventListener("click", ()=> loadCustomerBookings(el("myBookingPhone")?.value || ""));
+  if(el("myBookingPhone")) el("myBookingPhone").addEventListener("keydown", (ev)=>{
+    if(ev.key === "Enter"){
+      ev.preventDefault();
+      loadCustomerBookings(el("myBookingPhone")?.value || "");
     }
   });
 
