@@ -405,7 +405,7 @@ async function addFinanceFromBooking(client, bookingId) {
 app.get("/api/health", async (req, res) => {
   try {
     const r = await getPool().query("SELECT 1 AS ok");
-    res.json({ ok: true, version: "7.0.0", db: r.rows[0].ok, tz: TZ, open: toHHMM(OPEN_MIN), close: toHHMM(CLOSE_MIN) });
+    res.json({ ok: true, version: "8.0.0", db: r.rows[0].ok, tz: TZ, open: toHHMM(OPEN_MIN), close: toHHMM(CLOSE_MIN) });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

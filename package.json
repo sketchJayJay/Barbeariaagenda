@@ -1,7 +1,7 @@
 {
   "name": "barbearia-suprema-agendamentos",
-  "version": "7.0.0",
-  "description": "Agenda Suprema com confirmação para o WhatsApp do cliente e conexão da barbearia",
+  "version": "8.0.0",
+  "description": "Agenda Suprema com fotos ilustrativas dos serviços e confirmação para o WhatsApp do cliente",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

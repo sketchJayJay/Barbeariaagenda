@@ -1,0 +1,148 @@
+/* Referências visuais do catálogo. Escopo restrito à página de reservas. */
+.booking-page .service-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.booking-page .service-option {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #191e16;
+}
+
+.service-photo {
+  display: block;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  background: #151912;
+  border-bottom: 1px solid #343c2b;
+}
+
+.service-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 42%;
+  transition: transform .25s ease;
+}
+
+.service-photo-fallback {
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, #49412b, #1b2017 75%);
+  color: #d7b77a;
+}
+
+.service-photo-fallback .icon {
+  width: 42px;
+  height: 42px;
+}
+
+.service-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  min-height: 105px;
+  padding: 15px;
+}
+
+.service-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #eeeee6;
+  overflow-wrap: break-word;
+}
+
+.service-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  margin-top: auto;
+}
+
+.service-meta small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #b0b7a4;
+  white-space: nowrap;
+}
+
+.service-meta small .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.booking-page .service-price {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e1c18a;
+}
+
+.booking-page .selection-mark {
+  top: 10px;
+  right: 10px;
+  width: 25px;
+  height: 25px;
+  border: 2px solid #1a2015;
+  box-shadow: 0 2px 10px #0005;
+}
+
+.booking-page .selection-mark .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.booking-page .service-option.selected .service-photo {
+  border-bottom-color: #9e844f;
+}
+
+.booking-page .service-photo-note {
+  color: #aab29d;
+  line-height: 1.7;
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .booking-page .service-option:hover .service-photo img {
+    transform: scale(1.025);
+  }
+}
+
+@media (max-width: 1000px) {
+  .service-content { padding: 12px; }
+  .service-name { font-size: 13px; }
+}
+
+@media (max-width: 760px) {
+  .booking-page .service-grid { gap: 10px; }
+  .booking-page .service-option { border-radius: 10px; }
+  .service-content { padding: 11px; min-height: 108px; gap: 12px; }
+  .service-name { font-size: 12px; }
+  .service-meta small { font-size: 10px; gap: 4px; }
+  .service-meta small .icon { width: 11px; height: 11px; }
+  .booking-page .service-price { font-size: 12px; }
+  .booking-page .selection-mark { top: 7px; right: 7px; width: 22px; height: 22px; }
+}
+
+@media (max-width: 360px) {
+  .service-content { padding: 10px 9px; }
+  .service-name { font-size: 11px; }
+}

@@ -1,6 +1,10 @@
-# Suprema — agenda renovada, versão 7
+# Suprema — fotos dos serviços, versão 8
 
 O sistema continua em Node.js + PostgreSQL, pronto para o Coolify, na **porta 3000**.
+
+Esta atualização acrescenta seis fotos ilustrativas aos cartões de serviço, com arquivos WebP locais em duas resoluções para computador e celular. As imagens são referências geradas, não um portfólio de atendimentos feitos pela barbearia. Os serviços, preços, durações, reservas e integração do WhatsApp permanecem os mesmos.
+
+Se o serviço Evolution já está instalado, atualize somente a aplicação da agenda. Preserve as variáveis `WHATSAPP_PROVIDER`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY` e `EVOLUTION_INSTANCE` já configuradas no Coolify. A autorização do número pelo QR Code continua sendo feita no painel da agenda.
 
 ## 1. Atualizar o sistema existente
 
