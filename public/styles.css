@@ -10,3 +10,5 @@
 .hero{overflow:hidden}
 .search-input>i{position:absolute;left:13px;top:13px;width:17px;height:17px;color:#859c6d;pointer-events:none}
 .search-input>i>.icon{width:17px;height:17px}
+
+.qr-display{display:grid;grid-template-columns:220px 1fr;align-items:center;gap:27px;margin:20px 0}.qr-display>img{width:220px;height:220px;background:#fff;padding:10px;border-radius:10px;object-fit:contain}.qr-display h3{font-size:16px}.qr-display p{font-size:12px;line-height:1.8;color:#aab99b;margin-top:12px}@media(max-width:760px){.qr-display{grid-template-columns:1fr;gap:20px}.qr-display>img{margin:0 auto}.qr-display p{font-size:11px}}

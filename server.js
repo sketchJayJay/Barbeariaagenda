@@ -15,7 +15,7 @@ const PORT = Number(process.env.PORT || 3000);
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const FINANCE_PASSWORD = process.env.FINANCE_PASSWORD || ADMIN_PASSWORD || "";
-const OWNER_WHATSAPP = (process.env.OWNER_WHATSAPP || "3298195165").replace(/\D/g, "");
+const OWNER_WHATSAPP = (process.env.OWNER_WHATSAPP || "5532998195165").replace(/\D/g, "");
 const TZ = process.env.TZ || "America/Sao_Paulo";
 
 // Horário de funcionamento e passo da agenda
@@ -405,7 +405,7 @@ async function addFinanceFromBooking(client, bookingId) {
 app.get("/api/health", async (req, res) => {
   try {
     const r = await getPool().query("SELECT 1 AS ok");
-    res.json({ ok: true, version: "6.0.0", db: r.rows[0].ok, tz: TZ, open: toHHMM(OPEN_MIN), close: toHHMM(CLOSE_MIN) });
+    res.json({ ok: true, version: "7.0.0", db: r.rows[0].ok, tz: TZ, open: toHHMM(OPEN_MIN), close: toHHMM(CLOSE_MIN) });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -415,7 +415,7 @@ app.get("/api/services", async (req, res, next) => {
   try {
     const config = await whatsapp.config();
     res.json({ok:true, owner_whatsapp:config.owner_whatsapp,
-      notification_mode:config.enabled ? 'automatic' : 'manual', min_date:minAllowedBookingDateISO(),
+      notification_mode:config.enabled ? 'automatic' : 'manual', notification_target:'customer', min_date:minAllowedBookingDateISO(),
       today:formatISODateLocal(nowInSaoPaulo()), open:toHHMM(OPEN_MIN),close:toHHMM(CLOSE_MIN),
       services:SERVICES.map(s=>({...s,label:s.label}))});
   } catch(e) { next(e); }
@@ -572,7 +572,7 @@ app.post("/api/bookings", async (req, res) => {
       const previous = await client.query('SELECT * FROM bookings WHERE request_key=$1', [requestKey]);
       if (previous.rows[0]) {
         const r=previous.rows[0];
-        const notice=await client.query('SELECT id,status,provider FROM whatsapp_notifications WHERE booking_id=$1',[r.id]);
+        const notice=await client.query("SELECT id,status,provider,event FROM whatsapp_notifications WHERE booking_id=$1 AND event='booking.customer_confirmation'",[r.id]);
         await client.query('COMMIT');
         return res.json({ok:true,booking:{...r,start:toHHMM(r.start_min),end:toHHMM(r.end_min),price_reais:Number(r.price_cents)/100},notification:notice.rows[0]||{status:'manual'}});
       }
@@ -817,6 +817,16 @@ app.patch("/api/admin/bookings/:id", adminAuth, async (req, res, next) => {
 
 app.get('/api/admin/whatsapp',adminAuth,async(req,res,next)=>{
   try {res.json({ok:true,...await whatsapp.list()});} catch(e){next(e);}
+});
+app.get('/api/admin/whatsapp/connection',adminAuth,async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  try{res.json({ok:true,connection:await whatsapp.connection()});}
+  catch(e){res.status(502).json({ok:false,error:e.message});}
+});
+app.post('/api/admin/whatsapp/connect',adminAuth,async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  try{res.json({ok:true,...await whatsapp.connect()});}
+  catch(e){res.status(502).json({ok:false,error:e.message});}
 });
 app.put('/api/admin/whatsapp',adminAuth,async(req,res,next)=>{
   try {res.json({ok:true,config:await whatsapp.saveNumber(req.body.owner_whatsapp)});} catch(e){res.status(400).json({ok:false,error:e.message});}

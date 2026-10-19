@@ -1,0 +1,59 @@
+# Crie este serviço SEPARADO no Coolify. Não substitui o banco da agenda.
+services:
+  suprema-evolution:
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      SERVER_TYPE: http
+      SERVER_PORT: "8080"
+      SERVER_URL: ${EVOLUTION_PUBLIC_URL:?Defina a URL HTTPS do servico WhatsApp}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?Defina uma chave secreta}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://suprema_whatsapp:${EVOLUTION_DB_PASSWORD:?Defina uma senha hexadecimal}@suprema-whatsapp-db:5432/suprema_whatsapp?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: suprema_whatsapp
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://suprema-whatsapp-redis:6379/0
+      CACHE_REDIS_PREFIX_KEY: suprema_whatsapp
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+      TELEMETRY_ENABLED: "false"
+    volumes:
+      - suprema_whatsapp_instances:/evolution/instances
+    depends_on:
+      suprema-whatsapp-db:
+        condition: service_healthy
+      suprema-whatsapp-redis:
+        condition: service_healthy
+  suprema-whatsapp-db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: suprema_whatsapp
+      POSTGRES_USER: suprema_whatsapp
+      POSTGRES_PASSWORD: ${EVOLUTION_DB_PASSWORD:?Defina uma senha hexadecimal}
+    volumes:
+      - suprema_whatsapp_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U suprema_whatsapp -d suprema_whatsapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  suprema-whatsapp-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - suprema_whatsapp_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+volumes:
+  suprema_whatsapp_instances:
+  suprema_whatsapp_db:
+  suprema_whatsapp_redis:

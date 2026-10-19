@@ -1,15 +1,16 @@
-# Barbearia Suprema — v6
+# Barbearia Suprema — v7
 
-Agenda online e painel do barbeiro, com novo visual responsivo em preto, tons quentes e dourado.
+Agenda online e painel responsivo em preto e dourado.
 
-**Comece por [LEIA-PRIMEIRO.md](LEIA-PRIMEIRO.md)**: atualização no Coolify, porta 3000, conservação do banco existente e ativação do WhatsApp.
+**[LEIA-PRIMEIRO.md](LEIA-PRIMEIRO.md)** explica a atualização no Coolify e a conservação do banco existente. Porta da agenda: **3000**.
 
-- Node.js + Express + PostgreSQL.
-- Reservas em três etapas, disponibilidade atualizada e comprovante.
-- Painel com agenda, caixa, clientes e avisos.
-- WhatsApp por Cloud API oficial ou webhook, com fila persistente e tentativas.
-- Sem credenciais, o WhatsApp abre uma mensagem que o cliente precisa enviar.
+**[WHATSAPP-CLIENTES.md](WHATSAPP-CLIENTES.md)** explica o fluxo **WhatsApp da barbearia → confirmação ao cliente**, a autorização por QR Code e a alternativa com API oficial.
+
+- Reservas, comprovante e agenda do celular.
+- Agenda, financeiro, clientes e histórico de confirmações no painel.
+- Fila persistente e verificação do número conectado na opção Evolution.
+- As credenciais e a autorização real da conta ainda precisam ser configuradas.
 
 `npm ci` · `npm test` · `npm start`
 
-Não publique `.env`, credenciais ou backups do banco no repositório.
+Mantenha a mesma `DATABASE_URL` e os volumes do PostgreSQL ao atualizar.
